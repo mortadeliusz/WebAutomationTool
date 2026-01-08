@@ -184,83 +184,89 @@ WebAutomationTool/
 
 ## Template Variable System
 
-### Template Syntax
+### **Template Syntax**
 **Template Detection:** Any value containing `{{...}}` is treated as a template expression
 **Static Values:** Plain text without `{{...}}` is used as-is
-**Hybrid Values:** Mix of static text and templates: `"user-{{row_name('Email')}}-2024"`
+**Hybrid Values:** Mix of static text and templates: `"user_{{col('Email')}}_2024"`
 
-### Data Access Methods
+### **Data Access Methods**
 **Column by Name:**
-- Template: `{{row_name('Email')}}`
+- Template: `{{col('Email')}}`
 - Usage: Most common, readable, self-documenting
-- Example: `{{row_name('FirstName')}}`, `{{row_name('user.contact.email')}}` (flattened JSON)
+- Example: `{{col('FirstName')}}`, `{{col('user.contact.email')}}` (flattened JSON)
 
 **Column by Index:**
-- Template: `{{row_index(0)}}`
+- Template: `{{col(0)}}`
 - Usage: When column names change or are unreliable
-- Example: `{{row_index(0)}}` (first column), `{{row_index(3)}}` (fourth column)
+- Example: `{{col(0)}}` (first column), `{{col(3)}}` (fourth column)
 - Note: Uses 0-based indexing matching pandas DataFrame structure
 
-### Template Implementation
-**Regex-based Processing:**
-```python
-import re
-TEMPLATE_PATTERN = re.compile(r'\{\{([^}]+)\}\}')
+**Type-Based Access Rules:**
+- `{{col('Email')}}` → String parameter = column name
+- `{{col(0)}}` → Number parameter = column index (0-based)
+- `{{col('3')}}` → String '3' = column literally named "3"
+- `{{col(3)}}` → Number 3 = fourth column by index
 
-def is_template(value):
-    return bool(TEMPLATE_PATTERN.search(str(value)))
+### **Template Engine Architecture**
+
+**Full Expression Support:**
+```python
+# Simple column reference:
+{{col('Email')}}
+
+# Mixed static + template:
+"user_{{col('Username')}}_2024"
+
+# Multiple templates:
+"{{col('FirstName')}} {{col('LastName')}}"
+
+# Future advanced expressions:
+"{{col('Email') if col('Email') else 'default@example.com'}}"
+```
+
+**Template Processing:**
+```python
+# Regex-based detection and replacement
+TEMPLATE_PATTERN = re.compile(r'\{\{([^}]+)\}\}')
 
 def evaluate_template(value, df, row_index):
     if not is_template(value):
         return value  # Static value, return as-is
     
-    def replace_template(match):
-        template = match.group(1).strip()
-        return str(resolve_template_expression(template, df, row_index))
+    def replace_expression(match):
+        expression = match.group(1).strip()
+        return str(evaluate_expression(expression, df, row_index))
     
-    return TEMPLATE_PATTERN.sub(replace_template, str(value))
+    return TEMPLATE_PATTERN.sub(replace_expression, str(value))
 ```
 
-**Direct Pandas Integration:**
-```python
-def resolve_template_expression(template, df, row_index):
-    if template.startswith("row_name('") and template.endswith("')"):
-        column_name = template[10:-2]  # Extract column name
-        return df.at[row_index, column_name]
-    
-    elif template.startswith('row_index(') and template.endswith(')'):
-        col_index = int(template[10:-1])  # Extract index
-        return df.iloc[row_index, col_index]
-```
+### **Progressive Disclosure UI**
 
-### Template Examples
-**Simple Data References:**
-```json
-{
-  "type": "set_value",
-  "selector": "#email",
-  "value": "{{row_name('Email')}}",
-  "default": "no-email@example.com"
-}
+**Simple Mode (Default - MVP):**
 ```
+Value: [📊 Select Data Column ▼]
+       Displays as: [📧 Email] [×]  ← Pill/chip display
+```
+- User selects from dropdown of available columns
+- UI shows friendly column name as pill/chip
+- Backend generates `{{col('Email')}}` automatically
+- User never sees template syntax
 
-**Hybrid Templates:**
-```json
-{
-  "type": "set_value",
-  "selector": "#user-id",
-  "value": "user-{{row_name('Email')}}-{{row_index(0)}}"
-}
+**Advanced Mode (Future):**
 ```
+Value: [user_{{col('Email')}}_2024___] [📊]
+                                    [⚙️ Simple Mode]
+```
+- Full template expression editing
+- Data column helper button still available
+- Power users can write complex expressions
+- Supports conditionals, math, string manipulation
 
-**Complex Nested Data:**
-```json
-{
-  "type": "set_value",
-  "selector": "#contact",
-  "value": "{{row_name('user.contact.email')}}"
-}
-```
+**UI Implementation Strategy:**
+- **Simple Mode:** Dropdown selection → generates templates behind scenes
+- **Advanced Mode:** Direct template editing with syntax highlighting
+- **Seamless Toggle:** Switch between modes preserves data
+- **Consistent Backend:** Always processes full template expressions
 
 ## Application Pages Structure
 
@@ -1088,7 +1094,7 @@ def validate_license_request(license_key, machine_id):
 
 ## Smart XPath Generation & Self-Healing System
 
-### **Ultra-Strict Randomness Filtering**
+### **Ultra-Strict Randomness Filtering** ✅ IMPLEMENTED
 
 **Philosophy:** Better to reject questionable selectors and use powerful fallbacks than risk unreliable automation.
 
@@ -1111,19 +1117,73 @@ def _is_random(value: str) -> bool:
     return not any(re.match(pattern + '$', value) for pattern in SEMANTIC_PATTERNS)
 ```
 
-### **Self-Healing Locator System**
+### **XPath Failure Analysis System** ✅ IMPLEMENTED
 
-**When XPath Execution Fails:**
-1. **Parse Failed XPath:** Break down into component parts
-2. **Test Each Component:** Verify which specific attributes still exist
-3. **Granular Blacklisting:** Identify exact element+attribute combinations that failed
-4. **User-Guided Recovery:** Launch element picker with learned constraints
+**XPathFailureAnalyzer Class:**
+- **Component Parsing:** Breaks failed XPath into testable parts
+- **Individual Testing:** Tests each element+attribute combination
+- **Granular Blacklisting:** Identifies exactly what failed
+- **Failure Reporting:** Generates human-readable summaries
 
-**In-Execution Healing Flow:**
-1. Task execution fails → Analyze failure → User prompt → In-context picker → Seamless recovery
-2. **Same Browser Context:** User sees exact failure state
-3. **Learning System:** Avoids same mistakes immediately
-4. **Surgical Precision:** Only blacklists specific failing combinations
+**Example Analysis:**
+```python
+# Failed XPath: //div[contains(@class, "GzLjMd")]//button[@id="submit"]
+# Analysis Result:
+[
+    {"element": "div", "attribute": "class", "value": "GzLjMd"},  # Failed
+    # button[@id="submit"] still works - not blacklisted
+]
+```
+
+### **Enhanced Element Picker** ✅ IMPLEMENTED
+
+**Blacklist Integration:**
+```python
+picker = ElementPicker(page)
+result = picker.pick_element(blacklist=[
+    {"element": "div", "attribute": "class", "value": "GzLjMd"}
+])
+# Picker will avoid using div class="GzLjMd" in new selectors
+```
+
+**Smart Filtering:**
+- Applies blacklist at target element level
+- Applies blacklist at ancestor context level
+- Combines with randomness filtering
+- Surgical precision - only avoids specific failing combinations
+
+### **Self-Healing Task Execution** ✅ IMPLEMENTED
+
+**Automatic Failure Detection:**
+```python
+def _execute_click(self, action):
+    try:
+        page.click(action['selector'])
+        return {'success': True}
+    except Exception as error:
+        # Automatic healing attempt
+        return self._attempt_healing(action, str(error))
+```
+
+**Healing Process:**
+1. **Action Fails:** Click or set_value throws "Element not found"
+2. **Analyze Failure:** Parse XPath and test components
+3. **Generate Blacklist:** Identify problematic attributes
+4. **Report Results:** Detailed failure analysis for user
+5. **Ready for Recovery:** Foundation for user-guided healing
+
+**Current Status:**
+- ✅ **Failure Analysis:** Fully implemented and working
+- ✅ **Blacklist Generation:** Identifies specific failing attributes
+- ✅ **Enhanced Picker:** Avoids blacklisted combinations
+- ⏳ **UI Integration:** User-guided healing flow (next phase)
+
+**Example Output:**
+```
+🔍 Failure analysis: div class "GzLjMd" no longer exists
+✅ button id "submit" still works
+💡 Suggestion: Re-pick element avoiding div classes
+```
 
 ### XPath Generation Algorithm
 
@@ -1437,6 +1497,7 @@ def launch_browser(browser_config):
 - ✅ **Semantic Validation:** Only accepts proper naming conventions (camelCase, kebab-case, snake_case, PascalCase)
 - ✅ **Universal Filtering:** All attributes filtered for auto-generated values using single `is_random()` function
 - ✅ **Uniqueness-Focused:** No reliability flags - builds selectors until unique or adds ancestor context
+- ✅ **Blacklist Support:** Accepts blacklist parameter to avoid problematic element+attribute combinations
 - ✅ **QThread Integration:** Proper sync handling without PyQt6 event loop conflicts
 - ✅ **Browser Persistence:** Browser stays open between element picks (no re-authentication needed)
 - ✅ **Page Lifecycle Management:** Browser cleanup when leaving Task Manager page
@@ -1487,53 +1548,54 @@ Our sync approach provides the exact UX needed: hover highlighting + click captu
 - ✅ **Error handling:** Configurable stop/continue behavior with detailed error reporting
 - ✅ **Browser lifecycle:** Fresh browser per execution, automatic cleanup
 - ✅ **Thread isolation:** No cross-thread browser access issues
-- ✅ **Self-Healing Locators:** Intelligent XPath failure analysis and in-execution repair
-- ✅ **Granular Blacklisting:** Learns which specific element+attribute combinations are unreliable
-- ✅ **In-Context Healing:** Element picker launches in execution browser for seamless recovery
+- ✅ **XPath Failure Analysis:** Intelligent parsing and testing of failed selectors
+- ✅ **Granular Blacklisting:** Identifies specific element+attribute combinations that failed
+- ✅ **Self-Healing Foundation:** Automatic failure analysis with detailed reporting
+- ✅ **Healing-Ready Architecture:** Prepared for user-guided selector recovery
 
-### Phase 4: Data Integration & Execution Recovery (NEXT)
-- Data loading (CSV, Excel, JSON) with pandas
-- Template evaluation system (`{{row_name('Email')}}`)
-- Data preview with real-time processing status
-- Integration with UI data loading section
-- **Execution Worker Thread:** Separate thread for task execution with cancel/progress support
-- **Browser Per Thread:** Task Manager and Execution Worker each manage own browser lifecycle
-- **Execution State Management:** Persistent row-level status tracking
-- **Advanced Execution Options:** Status-based row selection for execution
-- **Connection Loss Handling:** User-controlled recovery with clear messaging
-- **Self-Healing Locators:** Intelligent XPath failure analysis and in-execution repair
-- **Smart XPath Generation:** Ultra-strict randomness filtering with recursive context building
+### Phase 4: Data Integration & Template System ✅ COMPLETE
+**Core Components Implemented:** ✅ COMPLETE
+- ✅ **DataLoader** (`src/core/data_loader.py`): CSV, Excel, JSON, YAML support with format auto-detection
+- ✅ **TemplateEvaluator** (`src/core/template_evaluator.py`): `{{col('Name')}}` and `{{col(0)}}` template processing
+- ✅ **DataLoadingWidget** (`src/ui/data_loading_widget.py`): Drag-drop, paste, file upload with data preview
+- ✅ **Task Execution Integration:** Data-driven task execution with template resolution
+- ✅ **Template Validation:** Pre-execution column validation and error reporting
 
-**Execution State System:**
-- **Dynamic Status Selection:** Checkboxes for available statuses (Failed, Unprocessed, Completed, etc.)
-- **Persistent State:** Per-task execution state storage (`task_name_execution_state.json`)
-- **Flexible Recovery:** Execute subsets based on row status
-- **Future-Proof:** New statuses automatically available in UI
+**Template System:** ✅ COMPLETE
+- **Template Syntax:** `{{col('Email')}}` (by name) and `{{col(0)}}` (by index)
+- **Default Values:** Fallback support when templates fail
+- **Progressive Disclosure:** Simple mode (dropdown selection) vs Advanced mode (full template editing)
+- **Validation:** Pre-execution validation of required columns
 
-**Connection Loss Strategy:**
-- **Task Creation Mode:** Prompt user "Connection lost. Restart browser?" (Cancel/Restart options)
-- **Task Execution Mode:** Always cancel with message "Connection lost. Use 'Execute Unprocessed Only' to resume."
-- **No Auto-Restart:** User always in control, no surprise re-authentication
-- **Clean Recovery:** Return to main screen, use advanced execution options to resume
-- **Browser Persistence:** Only restart browser if process actually crashes, not on page errors
+**Data Processing:** ✅ COMPLETE
+- **Multi-format Support:** CSV, Excel (.xlsx), JSON, YAML
+- **JSON Flattening:** Automatic flattening with dot notation (`user.contact.email`)
+- **Data Preview:** Real-time preview with first 10 rows
+- **Format Detection:** Auto-detection with manual override
 
-**Error Handling During Execution:**
-- **Default Strategy:** Stop on first error (simple, predictable)
-- **Future-Proof Design:** Backend supports configurable error handling (hidden from UI)
-- **Extensible Options:** Ready for "skip and continue", "pause and ask", etc.
-- **User Control:** Runtime options for manual intervention (pause to login, then resume)
-- **Error Types:** Distinguish global errors (logout) vs row-specific errors (validation)
+**UI Integration:** ✅ COMPLETE
+- **State-based UI:** Loading state → Data display state transformation
+- **Data Validation:** Real-time task validation against loaded data
+- **Progress Tracking:** Row-by-row execution progress
+- **Error Handling:** Template resolution errors with default fallbacks
 
-**Browser Reuse for Hybrid Workflow:**
-- **Persistent Browser:** Stays open between element picks and user interactions
-- **Authentication Preservation:** Maintains login sessions during task creation
-- **Manual Navigation Support:** User can authenticate, navigate, then continue picking elements
-- **Browser as Persistent Window:** Never restart browser based on page content or auth state
-- **Simple Connection Logic:** Only restart if browser process actually crashes (rare)
-- **Element Picker Reliability:** Works on any page state (login pages, error pages, etc.)
-- **User-Controlled Navigation:** Browser stays persistent regardless of page content
+### Phase 5: UI Design System ✅ COMPLETE
+**Systematic Styling:** ✅ COMPLETE
+- ✅ **Centralized Styles** (`src/ui/styles.py`): Consistent component styling system
+- ✅ **Button Variants:** Primary, Secondary, Danger button styles
+- ✅ **Form Components:** Standard dropdown, data table, muted text styles
+- ✅ **Color Palette:** Consistent color scheme across all components
+- ✅ **Applied Consistently:** All UI components use the design system
 
-### Phase 5: Subscription System (PLANNED)
+**Component Standards:**
+- **Primary Buttons:** Green, bold, for main actions (Execute, Load Data)
+- **Secondary Buttons:** Gray border, subtle, for secondary actions (Refresh, Clear)
+- **Danger Buttons:** Red, for destructive actions (Cancel)
+- **Data Tables:** Alternating rows, proper headers, consistent styling
+- **Dropdowns:** Consistent border, hover states, proper sizing
+- **Muted Text:** Subtle gray text for secondary information
+
+### Phase 6: Subscription System (PLANNED)
 - Trial system with local tracking
 - License key validation
 - Payment integration
@@ -1554,9 +1616,16 @@ Our sync approach provides the exact UX needed: hover highlighting + click captu
 - JSON schema design: ✅ Complete
 - Task processor design: ✅ Complete
 - Data loading pipeline design: ✅ Complete
-- Implementation: ⏳ Ready to begin
+- Browser integration: ✅ Complete
+- Element picker system: ✅ Complete
+- Task execution engine: ✅ Complete
+- Data integration & templates: ✅ Complete
+- UI design system: ✅ Complete
+- Implementation: ✅ Core functionality complete
+
+**Ready for:** UI refinement, subscription system, or production deployment
 
 ---
 
-*Last Updated: [Current Date]*
-*Status: Ready for implementation phase*
+*Last Updated: December 2024*
+*Status: Core automation functionality complete with systematic UI design*

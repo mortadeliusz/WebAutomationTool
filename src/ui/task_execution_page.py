@@ -8,30 +8,32 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
 from PyQt6.QtCore import Qt
 import sys
 import os
+import pandas as pd
 
 # Add src to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from core.task_storage import TaskStorage
 from core.task_execution_thread import TaskExecutionThread
+from core.template_evaluator import TemplateEvaluator
+from ui.data_loading_widget import DataLoadingWidget
+from ui.styles import Styles
 
 class TaskExecutionPage(QWidget):
     def __init__(self):
         super().__init__()
         self.task_storage = TaskStorage()
+        self.template_evaluator = TemplateEvaluator()
         self.execution_thread = None
+        self.current_data = None
         self.setup_ui()
         self.refresh_tasks()  # Load tasks on startup
     
     def setup_ui(self):
         """Setup Task Execution page UI"""
         layout = QVBoxLayout(self)
-        layout.setSpacing(20)
-        
-        # Page title
-        title = QLabel("Task Execution")
-        title.setStyleSheet("font-size: 24px; font-weight: bold; margin-bottom: 10px;")
-        layout.addWidget(title)
+        layout.setSpacing(10)
+        layout.setContentsMargins(15, 15, 15, 15)
         
         # Task selection
         task_section = self.create_task_selection()
@@ -45,38 +47,12 @@ class TaskExecutionPage(QWidget):
         execute_layout = QHBoxLayout()
         execute_layout.addStretch()
         
-        self.execute_btn = QPushButton("🚀 Execute Task")
-        self.execute_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #4CAF50;
-                color: white;
-                border: none;
-                padding: 12px 24px;
-                font-size: 16px;
-                font-weight: bold;
-                border-radius: 6px;
-            }
-            QPushButton:hover {
-                background-color: #45a049;
-            }
-        """)
+        self.execute_btn = QPushButton("Execute Task")
+        Styles.primary_button(self.execute_btn)
         self.execute_btn.clicked.connect(self.execute_task)
         
-        self.cancel_btn = QPushButton("❌ Cancel")
-        self.cancel_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #f44336;
-                color: white;
-                border: none;
-                padding: 12px 24px;
-                font-size: 16px;
-                font-weight: bold;
-                border-radius: 6px;
-            }
-            QPushButton:hover {
-                background-color: #da190b;
-            }
-        """)
+        self.cancel_btn = QPushButton("Cancel")
+        Styles.danger_button(self.cancel_btn)
         self.cancel_btn.clicked.connect(self.cancel_execution)
         self.cancel_btn.setVisible(False)
         
@@ -95,20 +71,32 @@ class TaskExecutionPage(QWidget):
         """Create task selection section"""
         frame = QFrame()
         frame.setFrameStyle(QFrame.Shape.Box)
-        frame.setStyleSheet("QFrame { border: 1px solid #ddd; border-radius: 6px; padding: 10px; }")
+        frame.setStyleSheet("""
+            QFrame { 
+                border: 1px solid #ddd; 
+                border-radius: 8px; 
+                padding: 10px;
+                background-color: white;
+            }
+        """)
         
         layout = QVBoxLayout(frame)
         
-        # Task selection
+        # Task selection - no redundant title
         task_layout = QHBoxLayout()
-        task_layout.addWidget(QLabel("Select Task:"))
+        
+        task_label = QLabel("Task:")
+        task_label.setStyleSheet("font-size: 14px; color: #555; min-width: 60px;")
+        task_layout.addWidget(task_label)
         
         self.task_combo = QComboBox()
         self.task_combo.addItem("No tasks available")
-        self.task_combo.setMinimumWidth(300)
+        self.task_combo.setMinimumWidth(350)
+        Styles.standard_dropdown(self.task_combo)
         task_layout.addWidget(self.task_combo)
         
         refresh_btn = QPushButton("Refresh")
+        Styles.secondary_button(refresh_btn)
         refresh_btn.clicked.connect(self.refresh_tasks)
         task_layout.addWidget(refresh_btn)
         
@@ -121,46 +109,21 @@ class TaskExecutionPage(QWidget):
         """Create data loading section"""
         frame = QFrame()
         frame.setFrameStyle(QFrame.Shape.Box)
-        frame.setStyleSheet("QFrame { border: 1px solid #ddd; border-radius: 6px; padding: 10px; }")
-        
-        layout = QVBoxLayout(frame)
-        
-        # Data loading label
-        layout.addWidget(QLabel("Load Data:"))
-        
-        # Data loading area (placeholder)
-        data_area = QFrame()
-        data_area.setFrameStyle(QFrame.Shape.StyledPanel)
-        data_area.setStyleSheet("""
-            QFrame {
-                border: 2px dashed #ccc;
-                border-radius: 6px;
-                background-color: #f9f9f9;
-                min-height: 100px;
+        frame.setStyleSheet("""
+            QFrame { 
+                border: 1px solid #ddd; 
+                border-radius: 8px; 
+                padding: 15px;
+                background-color: white;
             }
         """)
         
-        data_layout = QVBoxLayout(data_area)
-        data_layout.addStretch()
+        layout = QVBoxLayout(frame)
         
-        load_btn = QPushButton("📁 Load Data")
-        load_btn.setStyleSheet("border: none; background: none; font-size: 14px;")
-        data_layout.addWidget(load_btn, alignment=Qt.AlignmentFlag.AlignCenter)
-        
-        help_text = QLabel("Drag & drop files here or Ctrl+V to paste")
-        help_text.setStyleSheet("color: #666; font-size: 12px;")
-        help_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        data_layout.addWidget(help_text)
-        
-        data_layout.addStretch()
-        
-        layout.addWidget(data_area)
-        
-        # Data preview (placeholder)
-        self.data_preview = QTableWidget(0, 0)
-        self.data_preview.setMaximumHeight(200)
-        self.data_preview.hide()  # Hidden until data is loaded
-        layout.addWidget(self.data_preview)
+        # Data loading widget - no title needed
+        self.data_widget = DataLoadingWidget()
+        self.data_widget.data_loaded.connect(self.on_data_loaded)
+        layout.addWidget(self.data_widget)
         
         return frame
     
@@ -168,17 +131,46 @@ class TaskExecutionPage(QWidget):
         """Create progress tracking section"""
         frame = QFrame()
         frame.setFrameStyle(QFrame.Shape.Box)
-        frame.setStyleSheet("QFrame { border: 1px solid #ddd; border-radius: 6px; padding: 10px; }")
+        frame.setStyleSheet("""
+            QFrame { 
+                border: 1px solid #ddd; 
+                border-radius: 8px; 
+                padding: 10px;
+                background-color: white;
+            }
+        """)
         
         layout = QVBoxLayout(frame)
         
-        # Progress bar
+        # Progress bar - no redundant title
         self.progress_bar = QProgressBar()
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 2px solid #ddd;
+                border-radius: 8px;
+                text-align: center;
+                font-size: 14px;
+                font-weight: bold;
+                height: 25px;
+            }
+            QProgressBar::chunk {
+                background-color: #4CAF50;
+                border-radius: 6px;
+            }
+        """)
         self.progress_bar.setVisible(False)
         layout.addWidget(self.progress_bar)
         
         # Status text
         self.status_label = QLabel("")
+        self.status_label.setStyleSheet("""
+            font-size: 14px; 
+            color: #555; 
+            margin-top: 8px;
+            padding: 8px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        """)
         self.status_label.setVisible(False)
         layout.addWidget(self.status_label)
         
@@ -196,6 +188,35 @@ class TaskExecutionPage(QWidget):
         else:
             self.task_combo.addItem("No tasks available")
     
+    def on_data_loaded(self, df: pd.DataFrame):
+        """Handle data being loaded"""
+        self.current_data = df
+        print(f"📊 Data loaded: {len(df)} rows, {len(df.columns)} columns")
+        
+        # Validate current task if one is selected
+        self.validate_current_task()
+    
+    def validate_current_task(self):
+        """Validate current task against loaded data"""
+        task_name = self.task_combo.currentText()
+        if task_name == "No tasks available" or not self.current_data is not None:
+            return
+        
+        task = self.task_storage.load_task(task_name)
+        if not task:
+            return
+        
+        # Validate templates
+        validation = self.template_evaluator.validate_task_templates(task, self.current_data)
+        
+        if not validation['valid']:
+            missing = ", ".join(validation['missing_columns'])
+            QMessageBox.warning(
+                self, 
+                "Template Validation", 
+                f"Task requires columns that are not in the data:\n{missing}\n\nAvailable columns: {', '.join(validation['available_columns'])}"
+            )
+    
     def execute_task(self):
         """Execute selected task in worker thread"""
         task_name = self.task_combo.currentText()
@@ -209,8 +230,27 @@ class TaskExecutionPage(QWidget):
             QMessageBox.critical(self, "Error", f"Failed to load task '{task_name}'")
             return
         
+        # Check if task needs data
+        needs_data = self.task_needs_data(task)
+        
+        if needs_data and self.current_data is None:
+            QMessageBox.warning(self, "Warning", "This task requires data. Please load data first.")
+            return
+        
+        # Validate templates if data is provided
+        if self.current_data is not None:
+            validation = self.template_evaluator.validate_task_templates(task, self.current_data)
+            if not validation['valid']:
+                missing = ", ".join(validation['missing_columns'])
+                QMessageBox.critical(
+                    self, 
+                    "Template Validation Failed", 
+                    f"Task requires columns that are not in the data:\n{missing}\n\nAvailable columns: {', '.join(validation['available_columns'])}"
+                )
+                return
+        
         # Start execution in worker thread
-        self.execution_thread = TaskExecutionThread(task)
+        self.execution_thread = TaskExecutionThread(task, self.current_data)
         self.execution_thread.progress_update.connect(self.on_progress_update)
         self.execution_thread.action_completed.connect(self.on_action_completed)
         self.execution_thread.execution_finished.connect(self.on_execution_finished)
@@ -225,6 +265,11 @@ class TaskExecutionPage(QWidget):
         
         # Start execution
         self.execution_thread.start()
+    
+    def task_needs_data(self, task: dict) -> bool:
+        """Check if task contains any template expressions that require data"""
+        required_columns = self.template_evaluator.extract_required_columns(task)
+        return len(required_columns) > 0
     
     def cancel_execution(self):
         """Cancel running execution"""

@@ -3,7 +3,7 @@ Element Picker - Proper implementation with hover highlighting and click capture
 """
 
 import re
-from typing import Dict, Tuple, Optional
+from typing import Dict, Tuple, Optional, List
 from playwright.sync_api import Page
 
 class ElementPicker:
@@ -37,12 +37,17 @@ class ElementPicker:
     
     def __init__(self, page: Page):
         self.page = page
+        self.blacklist = []
     
-    def pick_element(self) -> Dict[str, str]:
+    def pick_element(self, blacklist: List[Dict[str, str]] = None) -> Dict[str, str]:
         """
         Enable element picking mode with hover highlighting and click capture
+        Args:
+            blacklist: List of element+attribute combinations to avoid
         Returns: {'selector': xpath, 'reliability': level, 'method': 'xpath'}
         """
+        self.blacklist = blacklist or []
+        
         try:
             # Inject hover highlighting script
             self.page.add_script_tag(content="""
@@ -182,22 +187,25 @@ class ElementPicker:
         attributes = target_element['attributes']
         text_content = target_element['textContent']
         
+        # Get clean attributes (filtered for randomness and blacklist)
+        clean_attrs = self._get_clean_attributes(target_element)
+        
         # Generate selector candidates in priority order
         candidates = []
         
         # Priority 1: Clean ID
-        if 'id' in attributes and not self._is_random(attributes['id']):
-            candidates.append(f'//[@id="{attributes["id"]}"]')
+        if 'id' in clean_attrs:
+            candidates.append(f'//[@id="{clean_attrs["id"]}"]')
         
         # Priority 2: Element type + clean name
-        if 'name' in attributes and not self._is_random(attributes['name']):
-            candidates.append(f'//{tag_name}[@name="{attributes["name"]}"]')
+        if 'name' in clean_attrs:
+            candidates.append(f'//{tag_name}[@name="{clean_attrs["name"]}"]')
         
         # Priority 3: Element type + clean test attributes
         test_attrs = ['data-testid', 'data-cy', 'data-test', 'data-automation', 'data-qa']
         for attr in test_attrs:
-            if attr in attributes and not self._is_random(attributes[attr]):
-                candidates.append(f'//{tag_name}[@{attr}="{attributes[attr]}"]')
+            if attr in clean_attrs:
+                candidates.append(f'//{tag_name}[@{attr}="{clean_attrs[attr]}"]')
         
         # Priority 4: Element type + stable text content
         if (text_content and len(text_content) < 50 and 
@@ -206,7 +214,7 @@ class ElementPicker:
             candidates.append(f'//{tag_name}[text()="{text_content}"]')
         
         # Priority 5: Element type + type attribute
-        if 'type' in attributes:
+        if 'type' in attributes:  # Type is usually stable
             candidates.append(f'//{tag_name}[@type="{attributes["type"]}"]')
         
         # Priority 6: Just element type (last resort)
@@ -217,10 +225,38 @@ class ElementPicker:
         base_selector = candidates[0] if candidates else f'//{tag_name}'
         
         # Add ancestor context if base selector might not be unique
-        if len(candidates) > 1 or not ('id' in attributes and not self._is_random(attributes['id'])):
+        if len(candidates) > 1 or not ('id' in clean_attrs):
             return self._add_ancestor_context(base_selector, ancestors)
         
         return base_selector
+    
+    def _is_blacklisted(self, element_tag: str, attribute: str, value: str) -> bool:
+        """Check if element+attribute combination is blacklisted"""
+        for item in self.blacklist:
+            if (item.get("element") == element_tag and 
+                item.get("attribute") == attribute and 
+                item.get("value") == value):
+                return True
+        return False
+    
+    def _get_clean_attributes(self, element_info: Dict) -> Dict[str, str]:
+        """Get clean attributes, filtering out blacklisted and random values"""
+        tag_name = element_info['tagName']
+        attributes = element_info['attributes']
+        clean_attrs = {}
+        
+        for attr_name, attr_value in attributes.items():
+            # Skip if blacklisted
+            if self._is_blacklisted(tag_name, attr_name, attr_value):
+                continue
+            
+            # Skip if random
+            if self._is_random(attr_value):
+                continue
+            
+            clean_attrs[attr_name] = attr_value
+        
+        return clean_attrs
     
     def _is_random(self, value: str) -> bool:
         """Check if any attribute value looks auto-generated"""
@@ -254,22 +290,25 @@ class ElementPicker:
     def _get_clean_ancestor_selector(self, ancestor_info):
         """Get clean selector for ancestor element"""
         tag_name = ancestor_info['tagName']
-        attributes = ancestor_info['attributes']
+        
+        # Get clean attributes for ancestor
+        clean_attrs = self._get_clean_attributes(ancestor_info)
         
         # Semantic containers
         if tag_name in ['form', 'nav', 'main', 'section', 'article', 'header', 'footer']:
             return f"//{tag_name}"
         
         # Clean ID
-        if 'id' in attributes and not self._is_random(attributes['id']):
-            return f'//[@id="{attributes["id"]}"]'
+        if 'id' in clean_attrs:
+            return f'//[@id="{clean_attrs["id"]}"]'
         
         # Stable class
-        if 'class' in attributes:
-            classes = attributes['class'].split()
-            stable_classes = [cls for cls in classes if not self._is_random(cls)]
-            if stable_classes:
-                return f'//{tag_name}[contains(@class, "{stable_classes[0]}")]'
+        if 'class' in clean_attrs:
+            classes = clean_attrs['class'].split()
+            # Find first non-blacklisted, non-random class
+            for cls in classes:
+                if not self._is_blacklisted(tag_name, 'class', cls) and not self._is_random(cls):
+                    return f'//{tag_name}[contains(@class, "{cls}")]'
         
         return None  # Skip this ancestor
     
