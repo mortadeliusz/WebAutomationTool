@@ -1,0 +1,1 @@
+# Web Automation Tool - Core Package
