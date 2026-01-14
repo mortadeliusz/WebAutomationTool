@@ -111,10 +111,3 @@ class DataLoader:
     def get_columns(self) -> List[str]:
         """Get list of available columns"""
         return self.current_columns.copy() if self.current_columns else []
-    
-    def validate_columns(self, required_columns: List[str]) -> Dict[str, bool]:
-        """Validate that required columns exist in current data"""
-        if not self.current_columns:
-            return {col: False for col in required_columns}
-        
-        return {col: col in self.current_columns for col in required_columns}

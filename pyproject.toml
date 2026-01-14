@@ -12,7 +12,10 @@ dependencies = [
     "playwright (>=1.57.0,<2.0.0)",
     "pandas (>=2.3.3,<3.0.0)",
     "openpyxl (>=3.1.5,<4.0.0)",
-    "pyyaml (>=6.0.3,<7.0.0)"
+    "pyyaml (>=6.0.3,<7.0.0)",
+    "eel (>=0.18.2,<0.19.0)",
+    "customtkinter (>=5.2.2,<6.0.0)",
+    "async-tkinter-loop (>=0.10.3,<0.11.0)"
 ]
 
 

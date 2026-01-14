@@ -1,1 +1,1 @@
-# Core package
+# Core business logic modules
