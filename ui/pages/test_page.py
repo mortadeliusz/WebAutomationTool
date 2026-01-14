@@ -76,10 +76,10 @@ class TestPage(ctk.CTkFrame):
     async def _launch_browser(self):
         try:
             self.log_result("Launching browser...")
-            controller = get_browser_controller()
+            browser_controller = get_browser_controller()
             
             url = self.url_entry.get() or "https://www.google.com"
-            page = await controller.get_page("chrome", "test", url)
+            page = await browser_controller.get_page("chrome", "test", url)
             
             if page:
                 current_url = page.url
@@ -93,11 +93,11 @@ class TestPage(ctk.CTkFrame):
     async def _pick_element(self):
         try:
             self.log_result("Starting element picker...")
-            controller = get_browser_controller()
+            browser_controller = get_browser_controller()
             
             # Get existing browser (don't navigate - preserve user state)
             url = self.url_entry.get() or "https://www.google.com"
-            page = await controller.get_page("chrome", "test", url, force_navigate=False)
+            page = await browser_controller.get_page("chrome", "test", url, force_navigate=False)
             
             if not page:
                 self.log_result("❌ No browser available. Launch browser first.")
@@ -122,10 +122,10 @@ class TestPage(ctk.CTkFrame):
     async def _force_navigate(self):
         try:
             self.log_result("Force navigating to URL...")
-            controller = get_browser_controller()
+            browser_controller = get_browser_controller()
             
             url = self.url_entry.get() or "https://www.google.com"
-            page = await controller.get_page("chrome", "test", url, force_navigate=True)
+            page = await browser_controller.get_page("chrome", "test", url, force_navigate=True)
             
             if page:
                 self.log_result(f"✅ Navigated to: {page.url}")

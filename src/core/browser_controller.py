@@ -251,3 +251,32 @@ class BrowserController:
                 'success': False,
                 'error': f"Navigation wait failed: {str(e)}"
             }
+    
+    def get_existing_page(self, alias: str = "main") -> Optional[Page]:
+        """Get existing page or None if not found"""
+        return self.pages.get(alias)
+    
+    async def launch_browser_page(self, browser_type: str, alias: str = "main") -> Optional[Page]:
+        """Launch new browser and return page or None if failed"""
+        result = await self.launch_browser(browser_type, alias)
+        return self.pages.get(alias) if result['success'] else None
+    
+    async def close_browser_page(self, alias: str = "main") -> bool:
+        """Close browser page and return True if successful, False if not found or failed"""
+        if alias not in self.browsers:
+            return False
+        
+        try:
+            if alias in self.pages and not self.pages[alias].is_closed():
+                await self.pages[alias].close()
+            if alias in self.contexts:
+                await self.contexts[alias].close()
+            if self.browsers[alias].is_connected():
+                await self.browsers[alias].close()
+            
+            self.pages.pop(alias, None)
+            self.contexts.pop(alias, None)
+            self.browsers.pop(alias, None)
+            return True
+        except:
+            return False

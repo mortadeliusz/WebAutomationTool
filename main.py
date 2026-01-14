@@ -1,14 +1,17 @@
 import customtkinter as ctk
 import json
 from async_tkinter_loop.mixins import AsyncCTk
-from components.sidebar import Sidebar
-from components.main_content import MainContent
 from src.app_services import initialize_services, cleanup_services
+from ui.main_layout import MainLayout
 
 class App(ctk.CTk, AsyncCTk):
     def __init__(self):
         super().__init__()
-        
+        self.setup_application()
+        self.layout = MainLayout(self)
+    
+    def setup_application(self) -> None:
+        """Initialize application configuration and services"""
         # Load config
         with open('config.json', 'r') as f:
             config = json.load(f)
@@ -25,18 +28,6 @@ class App(ctk.CTk, AsyncCTk):
         
         # Setup cleanup on window close
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
-        
-        # Create layout
-        self.create_layout()
-    
-    def create_layout(self):
-        # Create main content area
-        self.main_content = MainContent(self)
-        self.main_content.pack(side="right", fill="both", expand=True)
-        
-        # Create sidebar with main content dependency
-        self.sidebar = Sidebar(self, self.main_content)
-        self.sidebar.pack(side="left", fill="y")
     
     def on_closing(self):
         """Handle application shutdown with proper service cleanup"""
