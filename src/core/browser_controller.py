@@ -256,6 +256,35 @@ class BrowserController:
         """Get existing page or None if not found"""
         return self.pages.get(alias)
     
+    def resolve_browser_alias(self, action: Dict, workflow: Dict) -> str:
+        """
+        Resolve browser alias with fallback logic.
+        
+        Priority:
+        1. Action's browser_alias (explicit)
+        2. Single browser in workflow (implicit)
+        3. 'main' (last resort)
+        
+        Args:
+            action: Action dict that may have browser_alias
+            workflow: Workflow dict with browsers config
+            
+        Returns:
+            Browser alias string
+        """
+        # Check explicit alias
+        alias = action.get('browser_alias')
+        if alias:
+            return alias
+        
+        # Fallback to single browser
+        browsers = workflow.get('browsers', {})
+        if len(browsers) == 1:
+            return list(browsers.keys())[0]
+        
+        # Last resort default
+        return 'main'
+    
     async def launch_browser_page(self, browser_type: str, alias: str = "main") -> Optional[Page]:
         """Launch new browser and return page or None if failed"""
         result = await self.launch_browser(browser_type, alias)

@@ -7,6 +7,7 @@ from ui.pages.workflow_management import WorkflowManagementPage
 from ui.pages.subscription import SubscriptionPage
 from ui.pages.test_page import TestPage
 from ui.pages.browser_test import BrowserTestPage
+from ui.pages.data_expression_test import DataExpressionHelperTestPage
 
 # Central page configuration
 PAGES = [
@@ -34,6 +35,11 @@ PAGES = [
         "name": "browser_test",
         "class": BrowserTestPage,
         "menu_text": "Browser Test"
+    },
+    {
+        "name": "data_expression_test",
+        "class": DataExpressionHelperTestPage,
+        "menu_text": "Data Expression Test"
     }
 ]
 

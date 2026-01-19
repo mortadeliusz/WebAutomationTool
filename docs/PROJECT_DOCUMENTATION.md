@@ -10,7 +10,7 @@
 
 ## Current Implementation Status
 
-**Phase:** Component-Driven Action Editor Complete ✅  
+**Phase:** Browser Lifecycle Management Complete ✅  
 **Date:** January 2025  
 **Next Phase:** Data Integration and Workflow Execution
 
@@ -42,12 +42,25 @@ WebAutomationTool/
 │   │   ├── controller.py           # Page lifecycle and navigation logic
 │   │   ├── registry.py             # Central page configuration
 │   │   └── sidebar.py              # Navigation UI component
-│   └── pages/
-│       ├── workflow_execution.py   # Workflow execution interface
-│       ├── workflow_management.py  # Workflow creation and editing
-│       ├── subscription.py         # License management
-│       ├── test_page.py            # Element picker testing
-│       └── browser_test.py         # Browser integration testing
+│   ├── pages/
+│   │   ├── workflow_execution.py   # Workflow execution interface
+│   │   ├── workflow_management.py  # Workflow creation and editing
+│   │   ├── subscription.py         # License management
+│   │   ├── test_page.py            # Element picker testing
+│   │   └── browser_test.py         # Browser integration testing
+│   └── components/
+│       ├── workflow_list_panel.py
+│       ├── workflow_editor_panel.py
+│       ├── browser_config_section.py  # Browser lifecycle management
+│       ├── actions_list.py
+│       ├── status_bar.py
+│       └── fields/
+│           ├── text_input.py
+│           ├── dropdown.py
+│           ├── selector_picker.py
+│           ├── key_picker.py       # Key capture with 🎹 button
+│           ├── number_input.py     # Numeric input with validation
+│           └── data_expression_helper.py  # Column selector for templates
 ├── src/
 │   ├── app_services.py             # Global service management
 │   ├── core/                       # Production-ready business logic

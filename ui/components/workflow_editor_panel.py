@@ -5,6 +5,7 @@ Workflow Editor Panel - Edit workflow metadata and actions
 import customtkinter as ctk
 from typing import Dict, Optional, Callable, List
 from src.utils.workflow_files import save_workflow, create_workflow
+from ui.components.browser_config_section import BrowserConfigSection
 
 
 class WorkflowEditorPanel(ctk.CTkFrame):
@@ -29,22 +30,9 @@ class WorkflowEditorPanel(ctk.CTkFrame):
         self.name_entry = ctk.CTkEntry(name_frame, placeholder_text="Enter workflow name")
         self.name_entry.pack(side="right", fill="x", expand=True, padx=(0, 10))
         
-        # Browser field
-        browser_frame = ctk.CTkFrame(self)
-        browser_frame.pack(fill="x", padx=10, pady=5)
-        
-        ctk.CTkLabel(browser_frame, text="Browser:").pack(side="left", padx=(10, 5))
-        self.browser_combo = ctk.CTkComboBox(browser_frame, values=["chrome", "firefox"])
-        self.browser_combo.pack(side="right", padx=(0, 10))
-        self.browser_combo.set("chrome")
-        
-        # URL field
-        url_frame = ctk.CTkFrame(self)
-        url_frame.pack(fill="x", padx=10, pady=5)
-        
-        ctk.CTkLabel(url_frame, text="Starting URL:").pack(side="left", padx=(10, 5))
-        self.url_entry = ctk.CTkEntry(url_frame, placeholder_text="https://example.com")
-        self.url_entry.pack(side="right", fill="x", expand=True, padx=(0, 10))
+        # Browser configuration section
+        self.browser_config = BrowserConfigSection(self)
+        self.browser_config.pack(fill="x", padx=10, pady=10)
         
         # Control buttons
         controls = ctk.CTkFrame(self)
@@ -69,12 +57,9 @@ class WorkflowEditorPanel(ctk.CTkFrame):
         self.name_entry.delete(0, "end")
         self.name_entry.insert(0, workflow.get('name', ''))
         
-        browser_type = workflow.get('browsers', {}).get('main', {}).get('browser_type', 'chrome')
-        self.browser_combo.set(browser_type)
-        
-        starting_url = workflow.get('browsers', {}).get('main', {}).get('starting_url', '')
-        self.url_entry.delete(0, "end")
-        self.url_entry.insert(0, starting_url)
+        # Load browser config
+        browser_config = workflow.get('browsers', {}).get('main', {})
+        self.browser_config.set_config(browser_config)
         
         # Load actions into ActionsList
         actions = workflow.get('actions', [])
@@ -94,8 +79,7 @@ class WorkflowEditorPanel(ctk.CTkFrame):
         
         # Update workflow with form data
         self.current_workflow['name'] = self.name_entry.get() or "Unnamed Workflow"
-        self.current_workflow['browsers']['main']['browser_type'] = self.browser_combo.get()
-        self.current_workflow['browsers']['main']['starting_url'] = self.url_entry.get()
+        self.current_workflow['browsers']['main'] = self.browser_config.get_config()
         
         if save_workflow(self.current_workflow):
             self.on_status_update(f"Saved: {self.current_workflow['name']}")
@@ -114,6 +98,5 @@ class WorkflowEditorPanel(ctk.CTkFrame):
         """Clear the form"""
         self.current_workflow = None
         self.name_entry.delete(0, "end")
-        self.browser_combo.set("chrome")
-        self.url_entry.delete(0, "end")
+        self.browser_config.set_config({"browser_type": "chrome", "starting_url": ""})
         self.actions_list.set_actions([])
