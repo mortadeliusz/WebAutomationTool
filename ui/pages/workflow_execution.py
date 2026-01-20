@@ -9,11 +9,13 @@ from src.utils.workflow_files import list_workflows, load_workflow
 from src.core.data_loader import DataLoader
 from src.core.workflow_executor import WorkflowExecutor
 from ui.components.data_table import DataTable
+from src.utils.state_manager import get_last_selected_workflow, set_last_selected_workflow
 
 
 class WorkflowExecutionPage(ctk.CTkFrame):
-    def __init__(self, parent):
+    def __init__(self, parent, navigate_callback=None):
         super().__init__(parent)
+        self.navigate_callback = navigate_callback
         self.current_data: Optional[pd.DataFrame] = None
         self.workflows = self.load_available_workflows()
         self.setup_ui()
@@ -35,8 +37,13 @@ class WorkflowExecutionPage(ctk.CTkFrame):
         )
     
     def on_show(self):
-        """Called when page becomes visible - refresh workflow list"""
+        """Called when page becomes visible - refresh workflow list and load last selected"""
         self.refresh_workflows()
+        
+        # Load last selected workflow
+        last_workflow = get_last_selected_workflow()
+        if last_workflow and last_workflow in self.workflows:
+            self.workflow_combo.set(last_workflow)
     
     def setup_ui(self):
         """Setup the workflow execution UI"""
@@ -53,7 +60,8 @@ class WorkflowExecutionPage(ctk.CTkFrame):
         self.workflow_combo = ctk.CTkComboBox(
             workflow_frame, 
             values=self.workflows if self.workflows else ["No workflows found"],
-            state="readonly" if self.workflows else "disabled"
+            state="readonly" if self.workflows else "disabled",
+            command=self.on_workflow_selected
         )
         self.workflow_combo.grid(row=0, column=1, sticky="ew", padx=(0, 10), pady=10)
         
@@ -103,6 +111,11 @@ class WorkflowExecutionPage(ctk.CTkFrame):
         # Status
         self.status_label = ctk.CTkLabel(self, text="Ready")
         self.status_label.grid(row=5, column=0, sticky="w", padx=10, pady=(5, 10))
+    
+    def on_workflow_selected(self, workflow_name: str):
+        """Handle workflow selection from dropdown"""
+        if workflow_name and workflow_name != "No workflows found":
+            set_last_selected_workflow(workflow_name)
     
     def select_data_file(self):
         """Open file dialog and load selected data file"""

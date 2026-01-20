@@ -2,6 +2,8 @@ import customtkinter as ctk
 import json
 from async_tkinter_loop.mixins import AsyncCTk
 from src.app_services import initialize_services, cleanup_services
+from src.utils.state_manager import save_session_to_preferences
+from src.core.theme_manager import initialize_app_theme
 from ui.main_layout import MainLayout
 
 class App(ctk.CTk, AsyncCTk):
@@ -16,9 +18,8 @@ class App(ctk.CTk, AsyncCTk):
         with open('config.json', 'r') as f:
             config = json.load(f)
         
-        # Setup from config
-        ctk.set_appearance_mode(config['appearance_mode'])
-        ctk.set_default_color_theme(config['color_theme'])
+        # Initialize theme system
+        initialize_app_theme(self)
         
         self.title(config['title'])
         self.geometry(config['geometry'])
@@ -31,6 +32,9 @@ class App(ctk.CTk, AsyncCTk):
     
     def on_closing(self):
         """Handle application shutdown with proper service cleanup"""
+        # Save session state to preferences
+        save_session_to_preferences()
+        
         # Run cleanup (now sync since we have async loop)
         import asyncio
         asyncio.create_task(cleanup_services())

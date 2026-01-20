@@ -11,8 +11,11 @@ class UserPreferences:
         self.config_dir = Path("config")
         self.prefs_file = self.config_dir / "user_preferences.json"
         self.default_preferences = {
-            "theme": "light",
-            "lastSelectedTask": None
+            "theme": "🌙 Dark Mode",
+            "lastSelectedTask": None,
+            "last_visited_page": "workflow_management",
+            "last_selected_workflow": "",
+            "wizard_mode": True  # New users start with wizard
         }
         self._ensure_config_dir()
     
@@ -46,3 +49,21 @@ class UserPreferences:
         """Get single preference value"""
         preferences = self.load_all()
         return preferences.get(key, default)
+    
+    def set_preference(self, key, value):
+        """Set single preference value"""
+        preferences = self.load_all()
+        preferences[key] = value
+        self.save_all(preferences)
+
+
+# Global instance for easy access
+_user_prefs = UserPreferences()
+
+def get_user_preference(key: str, default=None):
+    """Get user preference value"""
+    return _user_prefs.get_preference(key, default)
+
+def set_user_preference(key: str, value):
+    """Set user preference value"""
+    _user_prefs.set_preference(key, value)

@@ -15,11 +15,13 @@ from ui.components.fields.selector_picker import SelectorPickerField
 
 
 class ActionsList(ctk.CTkFrame):
-    def __init__(self, parent, on_actions_changed: Callable[[List[Dict]], None]):
+    def __init__(self, parent, on_actions_changed: Callable[[List[Dict]], None], on_load_data: Callable = None):
         super().__init__(parent)
         self.on_actions_changed = on_actions_changed
+        self.on_load_data = on_load_data
         self.actions: List[Dict] = []
         self.editing_action = False
+        self.editing_index: Optional[int] = None  # None = new action, int = editing existing
         self.field_components = {}
         self.setup_ui()
     
@@ -29,8 +31,8 @@ class ActionsList(ctk.CTkFrame):
         header = ctk.CTkLabel(self, text="Actions:", font=ctk.CTkFont(weight="bold"))
         header.pack(pady=(10, 5), padx=10, anchor="w")
         
-        # Actions display
-        self.actions_frame = ctk.CTkScrollableFrame(self, height=150)
+        # Actions display with fixed height
+        self.actions_frame = ctk.CTkScrollableFrame(self, height=300)
         self.actions_frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
         
         # Add action button
@@ -43,23 +45,68 @@ class ActionsList(ctk.CTkFrame):
         self.refresh_display()
     
     def refresh_display(self):
-        """Refresh the actions display"""
+        """Refresh the actions display with in-place editing"""
         # Clear existing display
         for widget in self.actions_frame.winfo_children():
             widget.destroy()
         
-        # Display existing actions
+        # Display actions or editor
         for i, action in enumerate(self.actions):
-            action_frame = ctk.CTkFrame(self.actions_frame)
-            action_frame.pack(fill="x", padx=5, pady=2)
-            
-            action_text = f"{i+1}. {action.get('type', 'Unknown')} - {action.get('description', 'No description')}"
-            action_label = ctk.CTkLabel(action_frame, text=action_text)
-            action_label.pack(side="left", padx=10, pady=5)
+            if self.editing_index == i:
+                # Replace card with editor
+                self.create_inline_editor_at(i)
+            else:
+                # Show normal action card
+                self.create_action_card(i, action)
         
-        # Show inline editor if editing
-        if self.editing_action:
-            self.show_inline_editor()
+        # If adding new action, show editor at bottom
+        if self.editing_action and self.editing_index is None:
+            self.create_inline_editor_at(None)
+        
+        # CRITICAL: Force scroll region update to prevent sync issues
+        self.after(50, self._force_scroll_update)
+    
+    def _force_scroll_update(self):
+        """Force scroll region update to prevent scrollbar sync issues"""
+        try:
+            canvas = self.actions_frame._parent_canvas
+            canvas.configure(scrollregion=canvas.bbox("all"))
+        except:
+            pass
+    
+    def create_action_card(self, index: int, action: Dict):
+        """Create a clickable action card with delete button"""
+        # Row container for action card + delete button
+        row = ctk.CTkFrame(self.actions_frame, fg_color="transparent")
+        row.pack(fill="x", padx=5, pady=2)
+        
+        # Clickable action card (left side, expands)
+        action_card = ctk.CTkFrame(row)
+        action_card.pack(side="left", fill="both", expand=True, padx=(0, 5))
+        
+        # Make card clickable
+        action_card.bind("<Button-1>", lambda e: self.start_edit_action(index))
+        action_card.configure(cursor="hand2")
+        
+        # Hover effect
+        action_card.bind("<Enter>", lambda e: action_card.configure(border_width=2, border_color="#1f538d"))
+        action_card.bind("<Leave>", lambda e: action_card.configure(border_width=0))
+        
+        action_text = f"{index+1}. {action.get('type', 'Unknown')} - {action.get('description', 'No description')}"
+        action_label = ctk.CTkLabel(action_card, text=action_text)
+        action_label.pack(side="left", padx=10, pady=5)
+        action_label.bind("<Button-1>", lambda e: self.start_edit_action(index))
+        
+        # Delete button (right side, fixed width)
+        delete_button = ctk.CTkButton(
+            row,
+            text="🗑️",
+            width=40,
+            fg_color="darkred",
+            hover_color="red",
+            command=lambda: self.delete_action(index)
+        )
+        delete_button.pack(side="right")
     
     def start_add_action(self):
         """Start adding a new action"""
@@ -67,17 +114,41 @@ class ActionsList(ctk.CTkFrame):
             return  # Already editing
         
         self.editing_action = True
+        self.editing_index = None  # None means new action
         self.add_button.configure(state="disabled")
         self.refresh_display()
     
-    def show_inline_editor(self):
-        """Show inline action editor"""
-        # Editor container
-        editor_frame = ctk.CTkFrame(self.actions_frame)
-        editor_frame.pack(fill="x", padx=5, pady=5)
+    def start_edit_action(self, index: int):
+        """Start editing an existing action"""
+        # Auto-close any existing editor
+        if self.editing_action:
+            self.cancel_edit()
+        
+        self.editing_action = True
+        self.editing_index = index
+        self.add_button.configure(state="disabled")
+        self.refresh_display()
+    
+    def delete_action(self, index: int):
+        """Delete an action"""
+        if 0 <= index < len(self.actions):
+            self.actions.pop(index)
+            self.on_actions_changed(self.actions)
+            self.refresh_display()
+    
+    def create_inline_editor_at(self, index: Optional[int]):
+        """Create inline editor at specified position (replaces card or appends)"""
+        # Row container for editor + delete button
+        row = ctk.CTkFrame(self.actions_frame, fg_color="transparent")
+        row.pack(fill="x", padx=5, pady=2)
+        
+        # Editor container (left side, expands)
+        editor_frame = ctk.CTkFrame(row)
+        editor_frame.pack(side="left", fill="both", expand=True, padx=(0, 5))
         
         # Editor title
-        title = ctk.CTkLabel(editor_frame, text="New Action:", font=ctk.CTkFont(weight="bold"))
+        title_text = f"Edit Action {index+1}:" if index is not None else "New Action:"
+        title = ctk.CTkLabel(editor_frame, text=title_text, font=ctk.CTkFont(weight="bold"))
         title.pack(pady=(10, 5), padx=10, anchor="w")
         
         # Action type dropdown
@@ -99,11 +170,39 @@ class ActionsList(ctk.CTkFrame):
         save_button = ctk.CTkButton(button_frame, text="Save", command=self.save_action)
         save_button.pack(side="right", padx=(0, 5))
         
-        # Build initial fields
-        action_types = get_available_action_types()
-        if action_types:
-            self.action_type_field.set_value(action_types[0])
-            self.rebuild_fields(action_types[0])
+        # Delete button (right side, fixed width) - only for existing actions
+        if index is not None:
+            delete_button = ctk.CTkButton(
+                row,
+                text="🗑️",
+                width=40,
+                fg_color="darkred",
+                hover_color="red",
+                command=lambda: self.delete_action(index)
+            )
+            delete_button.pack(side="right")
+        else:
+            # Spacer for alignment with other rows
+            spacer = ctk.CTkFrame(row, width=40, fg_color="transparent")
+            spacer.pack(side="right")
+        
+        # Load existing action data if editing
+        if index is not None and 0 <= index < len(self.actions):
+            existing_action = self.actions[index]
+            action_type = existing_action.get('type', '')
+            if action_type:
+                self.action_type_field.set_value(action_type)
+                self.rebuild_fields(action_type)
+                # Populate field values
+                for field_name, component in self.field_components.items():
+                    if field_name in existing_action:
+                        component.set_value(existing_action[field_name])
+        else:
+            # Build initial fields for new action
+            action_types = get_available_action_types()
+            if action_types:
+                self.action_type_field.set_value(action_types[0])
+                self.rebuild_fields(action_types[0])
     
     def on_action_type_changed(self, action_type: str):
         """Handle action type change"""
@@ -137,6 +236,15 @@ class ActionsList(ctk.CTkFrame):
                     field_def.get('placeholder', ''),
                     is_optional
                 )
+            elif component_type == 'action_value_input':
+                from ui.components.fields.action_value_input import ActionValueInput
+                component = ActionValueInput(
+                    self.fields_container,
+                    field_def.get('label', field_name),
+                    field_def.get('placeholder', ''),
+                    is_optional,
+                    on_load_data=self.on_load_data
+                )
             elif component_type == 'selector_picker':
                 component = SelectorPickerField(
                     self.fields_container,
@@ -160,11 +268,11 @@ class ActionsList(ctk.CTkFrame):
             self.field_components[field_name] = component
     
     def save_action(self):
-        """Save the new action"""
+        """Save the action (new or edited) and persist to disk"""
         # Collect form data
         action_data = {
             'type': self.action_type_field.get_value(),
-            'browser_alias': 'main'
+            'browser_alias': 'main'  # Default to 'main' for single browser
         }
         
         # Get values from field components
@@ -173,22 +281,35 @@ class ActionsList(ctk.CTkFrame):
             if value:
                 action_data[field_name] = value
         
-        # Add to actions list
-        self.actions.append(action_data)
+        # Update existing or add new
+        if self.editing_index is not None and 0 <= self.editing_index < len(self.actions):
+            # Update existing action
+            self.actions[self.editing_index] = action_data
+        else:
+            # Add new action
+            self.actions.append(action_data)
         
-        # Notify parent
+        # Notify parent and trigger save to disk
         self.on_actions_changed(self.actions)
         
         # Reset editing state
         self.editing_action = False
+        self.editing_index = None
         self.add_button.configure(state="normal")
         self.refresh_display()
     
     def cancel_edit(self):
         """Cancel editing"""
         self.editing_action = False
+        self.editing_index = None
         self.add_button.configure(state="normal")
         self.refresh_display()
+    
+    def refresh_all_helpers(self):
+        """Refresh data sample in all helper-enabled fields"""
+        for component in self.field_components.values():
+            if hasattr(component, 'refresh_data_sample'):
+                component.refresh_data_sample()
     
     @async_handler
     async def on_element_picker_clicked(self, selector_field):

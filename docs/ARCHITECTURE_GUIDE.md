@@ -46,14 +46,20 @@ WebAutomationTool/
 │   │   ├── test_page.py
 │   │   └── browser_test.py
 │   └── components/                 # Reusable UI components
-│       ├── workflow_list_panel.py
-│       ├── workflow_editor_panel.py
+│       ├── workflow_list_view.py
+│       ├── workflow_editor_view.py
+│       ├── browser_config_section.py  # Browser lifecycle management
+│       ├── data_sample_status.py   # Data sample status indicator
 │       ├── actions_list.py         # Inline action editor
 │       ├── status_bar.py
 │       └── fields/                 # Field component library
-│           ├── text_input.py
-│           ├── dropdown.py
-│           └── selector_picker.py
+│           ├── action_value_input.py    # Value with expression helper
+│           ├── text_input.py            # Generic text input
+│           ├── dropdown.py              # Generic dropdown
+│           ├── selector_picker.py       # Selector with element picker
+│           ├── key_picker.py            # Key capture with 🎹 button
+│           ├── number_input.py          # Numeric input with validation
+│           └── data_expression_helper.py  # Column selector utility
 ├── src/                            # Business logic only
 │   ├── app_services.py             # Global service management
 │   ├── core/                       # Core automation modules
@@ -81,7 +87,88 @@ WebAutomationTool/
 
 ---
 
-## Navigation Architecture
+## Save Architecture
+
+### **User-Controlled Immediate Persistence**
+
+**Problem Solved:** Users need control over when changes persist without losing work
+
+**Solution:** Manual save operations with immediate disk persistence
+
+**Architecture:**
+```
+Action Save → Update workflow in memory + Save to disk immediately
+Workflow Save → Save current workflow state to disk
+```
+
+**Implementation:**
+```python
+# ActionsList.save_action() - Action-level save
+def save_action(self):
+    # Update action in memory
+    self.actions[self.editing_index] = action_data
+    # Trigger immediate persistence
+    self.on_actions_changed(self.actions)
+
+# WorkflowEditorView.on_actions_changed() - Auto-save workflow
+def on_actions_changed(self, actions: List[Dict]):
+    self.current_workflow['actions'] = actions
+    save_workflow(self.current_workflow)  # Immediate disk save
+
+# WorkflowEditorView.save_workflow() - Workflow-level save
+def save_workflow(self):
+    self.current_workflow['name'] = self.name_entry.get()
+    save_workflow(self.current_workflow)  # Save complete workflow
+```
+
+**User Experience:**
+- **Action Save:** "Save" button saves action permanently to disk
+- **Workflow Save:** "Save Workflow" button saves metadata changes to disk
+- **Clear Control:** User decides when changes become permanent
+- **Data Safety:** Every save operation persists immediately
+
+**Benefits:**
+- ✅ **User control** - No surprise auto-saves
+- ✅ **Data safety** - Frequent saves prevent loss
+- ✅ **Clear mental model** - Save = permanent storage
+- ✅ **Future-proof** - Supports wizard UI without changes
+
+---
+
+## Auto-Close Editor Pattern
+
+### **Seamless Action Editor Switching**
+
+**Problem Solved:** Users had to manually cancel editor before switching to different action
+
+**Solution:** Auto-close current editor when clicking different action
+
+**Implementation:**
+```python
+def start_edit_action(self, index: int):
+    # Auto-close any existing editor
+    if self.editing_action:
+        self.cancel_edit()
+    
+    # Open new editor
+    self.editing_action = True
+    self.editing_index = index
+    self.refresh_display()
+```
+
+**User Flow:**
+```
+Before: Edit Action 1 → Cancel → Click Action 2 → Edit Action 2
+After:  Edit Action 1 → Click Action 2 → Edit Action 2 (auto-close)
+```
+
+**Benefits:**
+- ✅ **Seamless switching** - One click to switch editors
+- ✅ **Industry standard** - Matches Gmail/Trello/Notion
+- ✅ **Reduced friction** - No manual cancel required
+- ✅ **Clean state** - Single editor active at a time
+
+---
 
 ### **Registry Pattern Implementation**
 
@@ -419,11 +506,35 @@ class SelectorPickerField(ctk.CTkFrame):
     def get_value(self) -> str
     def set_value(self, value: str)
     def set_picker_callback(self, callback: Callable)
+
+# ui/components/fields/key_picker.py
+class KeyPickerField(ctk.CTkFrame):
+    """Key capture with 🎹 button"""
+    def get_value(self) -> str
+    def set_value(self, value: str)
+    def start_key_capture(self)  # Captures keyboard key press
+
+# ui/components/fields/number_input.py
+class NumberInputField(ctk.CTkFrame):
+    """Numeric input with validation"""
+    def get_value(self) -> str
+    def set_value(self, value: str)
+    def validate(self)  # Validates numeric input
+
+# ui/components/fields/data_expression_helper.py
+class DataExpressionHelper(ctk.CTkFrame):
+    """Data column selector with name/index toggle"""
+    def __init__(self, target_entry, data_sample, on_load_data)
+    def set_data_sample(self, data_sample)  # Update available columns
+    def insert_expression(self, expression)  # Insert at cursor position
 ```
 
 **Component Features:**
 - **Consistent interface:** All fields implement get_value/set_value
 - **Element picker integration:** SelectorPickerField has built-in picker button
+- **Key capture:** KeyPickerField captures keyboard keys with 🎹 button
+- **Numeric validation:** NumberInputField validates and enforces min values
+- **Expression helper:** DataExpressionHelper provides column selection with mode toggle
 - **Async support:** Picker integration uses @async_handler
 - **Reusable:** Components used across different forms
 
@@ -463,32 +574,161 @@ class ActionsList(ctk.CTkFrame):
 
 **Problem Solved:** Hard-coded action types requiring code changes for new actions
 
-**Solution:** Registry-based action system with handler functions
+**Solution:** Registry-based action system with handler functions and metadata
+
+**Available Actions (7 total):**
+
+**Common Actions:**
+- `click` - Click element
+- `fill_field` - Instantly fill input (fast, works with all frameworks)
+- `navigate` - Navigate to URL
+- `type_text` - Type character-by-character (human-like, for autocomplete)
+- `press_key` - Press keyboard key (Enter, Tab, etc.)
+
+**Utility Actions:**
+- `wait_for_element` - Wait for element to appear (dynamic content)
+- `wait_seconds` - Wait fixed time (last resort only)
 
 ```python
-# src/core/action_handlers.py - Action registry
+# src/core/action_handlers.py - Action handlers
 async def handle_click(action: Dict, page: Page, row_data: Dict = None) -> Dict:
-    selector = action.get('selector', '')
-    await page.click(selector, timeout=5000)
+    await page.click(action['selector'], timeout=5000)
     return {'success': True, 'error': None}
 
 async def handle_fill_field(action: Dict, page: Page, row_data: Dict = None) -> Dict:
-    selector = action.get('selector', '')
     value = action.get('value', '')
-    
-    # Handler decides what to resolve
     if row_data:
         value = resolve_expression(value, row_data)
-    
-    await page.fill(selector, value, timeout=5000)
+    await page.fill(action['selector'], value, timeout=5000)
     return {'success': True, 'error': None}
 
-# Registry maps action types to handlers
+async def handle_navigate(action: Dict, page: Page, row_data: Dict = None) -> Dict:
+    url = action.get('url', '')
+    if row_data:
+        url = resolve_expression(url, row_data)
+    await page.goto(url, timeout=30000)
+    return {'success': True, 'error': None}
+
+async def handle_type_text(action: Dict, page: Page, row_data: Dict = None) -> Dict:
+    value = action.get('value', '')
+    if row_data:
+        value = resolve_expression(value, row_data)
+    await page.type(action['selector'], value, delay=50)
+    return {'success': True, 'error': None}
+
+async def handle_press_key(action: Dict, page: Page, row_data: Dict = None) -> Dict:
+    key = action.get('key', '')
+    KEY_MAP = {'Return': 'Enter', 'space': 'Space', 'BackSpace': 'Backspace'}
+    await page.keyboard.press(KEY_MAP.get(key, key))
+    return {'success': True, 'error': None}
+
+async def handle_wait_for_element(action: Dict, page: Page, row_data: Dict = None) -> Dict:
+    timeout = int(action.get('timeout', 30000))
+    await page.wait_for_selector(action['selector'], timeout=timeout)
+    return {'success': True, 'error': None}
+
+async def handle_wait_seconds(action: Dict, page: Page, row_data: Dict = None) -> Dict:
+    await asyncio.sleep(float(action.get('seconds', 1)))
+    return {'success': True, 'error': None}
+
+# Registry
 ACTION_HANDLERS = {
     'click': handle_click,
     'fill_field': handle_fill_field,
+    'navigate': handle_navigate,
+    'type_text': handle_type_text,
+    'press_key': handle_press_key,
+    'wait_for_element': handle_wait_for_element,
+    'wait_seconds': handle_wait_seconds,
 }
 ```
+
+### **Action Metadata System**
+
+**Problem Solved:** Actions need descriptions, categories, and user guidance
+
+**Solution:** Centralized metadata with optional sorting
+
+```python
+# Action metadata with categories and help text
+ACTION_METADATA = {
+    'click': {
+        'name': 'Click',
+        'description': 'Click element',
+        'category': 'common',
+        'sort_order': 1  # Force to top
+    },
+    'fill_field': {
+        'name': 'Fill Field',
+        'description': 'Instantly fill input (fast, works with all frameworks)',
+        'use_when': 'Standard forms, text fields, email fields',
+        'category': 'common',
+        'sort_order': 2  # Force second
+    },
+    'navigate': {
+        'name': 'Navigate',
+        'description': 'Go to URL',
+        'category': 'common'
+        # No sort_order - alphabetical within category
+    },
+    'type_text': {
+        'name': 'Type Text',
+        'description': 'Type character-by-character with delay (human-like)',
+        'use_when': 'Autocomplete fields, search suggestions, bot detection avoidance',
+        'category': 'common'
+    },
+    'press_key': {
+        'name': 'Press Key',
+        'description': 'Press keyboard key (Enter, Tab, Escape, etc.)',
+        'use_when': 'Submit forms, navigate fields, trigger shortcuts',
+        'category': 'common'
+    },
+    'wait_for_element': {
+        'name': 'Wait for Element',
+        'description': 'Wait for element to appear',
+        'use_when': 'Dynamic content, AJAX loading',
+        'category': 'utility',
+        'warning': 'Only use for dynamic content. Playwright auto-waits for most actions.'
+    },
+    'wait_seconds': {
+        'name': 'Wait (Seconds)',
+        'description': 'Wait fixed time',
+        'use_when': 'Rate limiting, slow APIs',
+        'category': 'utility',
+        'warning': '⚠️ Last resort only. Try wait_for_element first.'
+    }
+}
+
+def get_actions_by_category(category: str) -> list[str]:
+    """
+    Get actions by category with optional sorting:
+    1. Actions with sort_order (ascending)
+    2. Actions without sort_order (alphabetical)
+    """
+    actions_with_order = []
+    actions_without_order = []
+    
+    for action_type, metadata in ACTION_METADATA.items():
+        if metadata.get('category') != category:
+            continue
+        
+        sort_order = metadata.get('sort_order')
+        if sort_order is not None:
+            actions_with_order.append((action_type, sort_order))
+        else:
+            actions_without_order.append(action_type)
+    
+    sorted_with_order = [action for action, _ in sorted(actions_with_order, key=lambda x: x[1])]
+    sorted_without_order = sorted(actions_without_order)
+    
+    return sorted_with_order + sorted_without_order
+```
+
+**Benefits:**
+- **Categorization:** Common vs utility actions for progressive disclosure
+- **Optional sorting:** Only specify order for top actions (YAGNI)
+- **User guidance:** Help text, use cases, warnings
+- **Extensible:** Easy to add new actions with metadata
 
 **Stateless Action Execution:**
 ```python
@@ -550,6 +790,49 @@ class WorkflowExecutor:
                 result = await execute_action(action, row_data)
 ```
 
+### **Explicit Browser Control in Workflow Editing**
+
+**Problem Solved:** Users need to authenticate/navigate before using element picker
+
+**Solution:** Collapsible browser config section with explicit launch/close controls
+
+```python
+# ui/components/browser_config_section.py - Browser lifecycle UI
+class BrowserConfigSection(ctk.CTkFrame):
+    @async_handler
+    async def on_launch_clicked(self):
+        browser_type = self.browser_combo.get()
+        starting_url = self.url_entry.get().strip()
+        
+        controller = get_browser_controller()
+        result = await controller.launch_browser(browser_type, "main")
+        
+        if result['success'] and starting_url:
+            await controller.navigate(starting_url, "main")
+        
+        self.update_button_states()
+    
+    @async_handler
+    async def on_close_clicked(self):
+        controller = get_browser_controller()
+        await controller.close_browser_page("main")
+        self.update_button_states()
+```
+
+**Browser Lifecycle Policy:**
+```
+1. Launch: Explicit only (Launch button or picker auto-launch)
+2. Close: Explicit only (Close button or app shutdown)
+3. Reuse: Always reuse existing browser if running
+4. Cleanup: App shutdown closes all browsers
+```
+
+**Benefits:**
+- **Explicit control:** Users launch browser when needed
+- **Browser persistence:** Stays open across multiple picker sessions
+- **Clear feedback:** Visual status indicators (⚪/🟢/🔴)
+- **Future-proof:** Collapsible design scales to multi-browser workflows
+
 **Browser Controller Methods:**
 ```python
 # src/core/browser_controller.py - Clean separation of concerns
@@ -564,6 +847,9 @@ async def launch_browser_page(self, browser_type: str, alias: str = "main") -> O
 
 async def close_browser_page(self, alias: str = "main") -> bool:
     """Close browser page and return True if successful, False if not found or failed"""
+
+def resolve_browser_alias(self, action: Dict, workflow: Dict) -> str:
+    """Resolve browser alias with fallback logic (explicit > single browser > 'main')"""
 ```
 
 **Benefits:**
@@ -571,6 +857,7 @@ async def close_browser_page(self, alias: str = "main") -> bool:
 - **No embedded logic:** Browser controller has no workflow assumptions
 - **Caller control:** Workflow executor decides browser lifecycle
 - **Flexible composition:** Easy to implement different initialization strategies
+- **Defensive fallback:** Browser alias resolution handles missing values
 
 ---
 
@@ -604,16 +891,52 @@ def resolve_expression(expression: str, row_data: Dict) -> str:
 
 **Handler Usage:**
 ```python
-# Handler decides what to resolve
+# Handlers decide what to resolve
 async def handle_fill_field(action: Dict, page: Page, row_data: Dict = None):
+    selector = action.get('selector', '')
     value = action.get('value', '')
+    
     if row_data:
-        value = resolve_expression(value, row_data)  # Handler calls utility
-    await page.fill(action['selector'], value)
+        selector = resolve_expression(selector, row_data)  # Selector supports templates
+        value = resolve_expression(value, row_data)        # Value supports templates
+    
+    await page.fill(selector, value)
+
+async def handle_navigate(action: Dict, page: Page, row_data: Dict = None):
+    url = action.get('url', '')
+    
+    if row_data:
+        url = resolve_expression(url, row_data)  # URL supports templates
+    
+    await page.goto(url)
 
 async def handle_click(action: Dict, page: Page, row_data: Dict = None):
-    # Doesn't need template resolution - doesn't call resolve_expression
-    await page.click(action['selector'])
+    selector = action.get('selector', '')
+    
+    if row_data:
+        selector = resolve_expression(selector, row_data)  # Selector supports templates
+    
+    await page.click(selector)
+```
+
+**Fields Supporting Templates:**
+- **selector** - Dynamic element targeting (click, fill_field, type_text, wait_for_element)
+- **value** - Dynamic data input (fill_field, type_text)
+- **url** - Dynamic navigation (navigate)
+
+**Use Cases:**
+```python
+# Dynamic selectors
+selector = "//div[@id='user-{{col('user_id')}}']"           # XPath with dynamic ID
+selector = "[data-product='{{col('product_code')}}']"      # CSS with dynamic attribute
+selector = "//button[text()='Edit {{col('username')}}']"   # XPath with dynamic text
+
+# Dynamic values
+value = "{{col('email')}}"                                 # Simple column reference
+value = "user_{{col('username')}}_2024"                    # Hybrid static + dynamic
+
+# Dynamic URLs
+url = "https://example.com/user/{{col('user_id')}}"       # Dynamic URL path
 ```
 
 **Benefits:**
@@ -621,6 +944,7 @@ async def handle_click(action: Dict, page: Page, row_data: Dict = None):
 - **Handler control:** Each handler decides what needs resolution
 - **Extensible:** New handlers add their own resolution logic
 - **Simple utility:** String in, string out - pure function
+- **Power user friendly:** Enables advanced dynamic workflows
 
 ---
 
@@ -686,12 +1010,15 @@ User clicks 🎯 → SelectorPickerField → ActionsList.on_element_picker_click
 
 ## Development Patterns
 
-### **Adding New Pages**
+### **Adding New Actions**
 
-1. **Create page file** in `ui/pages/`
-2. **Import in registry** (`ui/navigation/registry.py`)
-3. **Add to PAGES list** with name, class, and menu text
-4. **Done** - Page automatically appears in navigation
+1. **Create handler function** in `src/core/action_handlers.py`
+2. **Register in ACTION_HANDLERS** dict
+3. **Add to ACTION_SCHEMAS** with required/optional fields
+4. **Add to ACTION_METADATA** with category, description, help text
+5. **Add field definitions** if new field types needed
+6. **Create field components** if new UI components needed
+7. **Done** - Action appears in workflow editor with proper UI
 
 ### **Adding New Services**
 
@@ -944,3 +1271,1108 @@ exe = EXE(
 - **Startup optimization** - Minimal imports, deferred loading
 
 *This architecture provides a solid foundation for long-term development with zero technical debt and proper separation of concerns. All components follow established design patterns and can be easily extended or modified.*
+
+
+---
+
+## UI Patterns
+
+### **Mini-Controller Pattern**
+
+**Problem Solved:** Pages need list-detail view switching without complex state management
+
+**Solution:** Page acts as mini-controller managing view transitions using grid show/hide
+
+**When to Use:**
+- Large editor that benefits from full-screen focus
+- Clear list ↔ detail mental model
+- Infrequent transitions between views
+
+**Implementation:**
+```python
+class WorkflowManagementPage(ctk.CTkFrame):
+    """Mini-controller for workflow list-detail views"""
+    
+    def setup_views(self):
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(0, weight=1)
+        
+        # List view
+        self.list_view = WorkflowListView(self, on_edit=self.show_editor, on_new=self.show_new)
+        self.list_view.grid(row=0, column=0, sticky="nsew")
+        
+        # Editor view
+        self.editor_view = WorkflowEditorView(self, on_save=self.on_save, on_cancel=self.show_list)
+        self.editor_view.grid(row=0, column=0, sticky="nsew")
+        self.editor_view.grid_remove()
+    
+    def show_list_view(self):
+        self.editor_view.grid_remove()
+        self.list_view.grid()
+    
+    def show_editor_view(self, workflow_name):
+        self.list_view.grid_remove()
+        self.editor_view.grid()
+```
+
+**Communication Pattern:**
+- Parent-mediated callbacks (no direct component coupling)
+- List view → Page → Editor view
+- Editor view → Page → List view
+
+**Benefits:**
+- ✅ Full-screen editing eliminates distractions
+- ✅ Clean separation of concerns
+- ✅ Reusable pattern (same as navigation)
+- ✅ Easy to extend
+
+**Example:** `WorkflowManagementPage` uses mini-controller for workflow list ↔ editor
+
+---
+
+### **Click-to-Edit Pattern**
+
+**Problem Solved:** Extra clicks required to edit items, cluttered UI with edit buttons
+
+**Solution:** Entire card is clickable, separate delete button to avoid propagation issues
+
+**Layout Pattern:**
+```python
+# Row container (transparent)
+row = ctk.CTkFrame(parent, fg_color="transparent")
+row.pack(fill="x", padx=5, pady=5)
+
+# Clickable card (left, expands)
+card = ctk.CTkFrame(row)
+card.pack(side="left", fill="both", expand=True, padx=(0, 5))
+card.bind("<Button-1>", lambda e: self.on_edit(item_name))
+card.configure(cursor="hand2")
+
+# Hover effect
+card.bind("<Enter>", lambda e: card.configure(border_width=2, border_color="#1f538d"))
+card.bind("<Leave>", lambda e: card.configure(border_width=0))
+
+# Delete button (right, fixed width)
+delete_button = ctk.CTkButton(row, text="🗑️", width=40)
+delete_button.pack(side="right")
+```
+
+**Visual Result:**
+```
+┌─────────────────────────────────────┐
+│ Login Workflow                      │  [🗑️]
+│ 5 actions • chrome                  │
+└─────────────────────────────────────┘
+     ↑ Click anywhere to edit           ↑ Delete
+```
+
+**Benefits:**
+- ✅ One click to edit (faster interaction)
+- ✅ Cleaner UI (no edit button)
+- ✅ No event propagation issues (separate elements)
+- ✅ Industry standard (Gmail, Trello, Notion)
+
+**Examples:** 
+- Workflow cards in `WorkflowListView`
+- Action cards in `ActionsList`
+
+---
+
+### **In-Place Editor Replacement**
+
+**Problem Solved:** Editor at bottom loses context, causes scroll sync issues
+
+**Solution:** Editor replaces card in same position using conditional rendering
+
+**Implementation:**
+```python
+def refresh_display(self):
+    # Clear display
+    for widget in self.container.winfo_children():
+        widget.destroy()
+    
+    # Conditional rendering: editor OR card
+    for i, item in enumerate(self.items):
+        if self.editing_index == i:
+            # Replace card with editor
+            self.create_inline_editor_at(i)
+        else:
+            # Show normal card
+            self.create_item_card(i, item)
+    
+    # New item editor at bottom
+    if self.editing_action and self.editing_index is None:
+        self.create_inline_editor_at(None)
+```
+
+**Visual Flow:**
+```
+Before Edit:
+  Action 1
+  Action 2  ← Click
+  Action 3
+
+After Edit:
+  Action 1
+  [Editor replaces Action 2]  ← Same position
+  Action 3
+
+After Save:
+  Action 1
+  Action 2 (updated)  ← Restored in same position
+  Action 3
+```
+
+**Benefits:**
+- ✅ Context preservation (see surrounding items)
+- ✅ Spatial consistency (edit where item is)
+- ✅ No excessive scrolling
+- ✅ Industry standard (Trello, Notion, Gmail)
+
+**Example:** `ActionsList` replaces action cards with inline editor
+
+---
+
+### **Scroll Sync Management**
+
+**Problem Solved:** CustomTkinter's scrollable frame loses sync when content changes dynamically
+
+**Solution:** Force scroll region update after every content change
+
+**Implementation:**
+```python
+def refresh_display(self):
+    # ... rebuild content ...
+    
+    # CRITICAL: Force scroll region update
+    self.after(50, self._force_scroll_update)
+
+def _force_scroll_update(self):
+    """Force scroll region update to prevent scrollbar sync issues"""
+    try:
+        canvas = self.scrollable_frame._parent_canvas
+        canvas.configure(scrollregion=canvas.bbox("all"))
+    except:
+        pass
+```
+
+**Why This Works:**
+- CustomTkinter doesn't auto-update scroll region on dynamic changes
+- Manual recalculation ensures scrollbar stays in sync
+- 50ms delay allows widgets to render before update
+
+**Benefits:**
+- ✅ Scrollbar always works (no stuck scrollbar)
+- ✅ User can always scroll up/down
+- ✅ Minimal code (~5 lines)
+- ✅ Fixes root cause
+
+**Example:** `ActionsList` forces scroll update after add/edit/delete/cancel
+
+---
+
+### **Pattern Decision Matrix**
+
+| Pattern | Use When | Don't Use When |
+|---------|----------|----------------|
+| **Mini-Controller** | Large editor, clear list-detail model | Small edits, frequent transitions |
+| **Click-to-Edit** | Cards/items in lists | Complex multi-action items |
+| **In-Place Editor** | Context preservation important | Editor much larger than card |
+| **Scroll Sync Fix** | Dynamic content in scrollable frame | Static content only |
+
+---
+
+
+
+## Data Expression Helper Architecture
+
+### **Progressive Disclosure Pattern for Template Variables**
+
+**Problem Solved:** Users need to insert `{{col('name')}}` or `{{col(0)}}` expressions without memorizing syntax
+
+**Solution:** Icon-based helper with educational popup and column selector
+
+---
+
+### **Component Design**
+
+**DataExpressionHelper** - Reusable expression insertion component
+
+```python
+# ui/components/fields/data_expression_helper.py
+class DataExpressionHelper(ctk.CTkFrame):
+    """
+    Icon button (\ud83d\udcca) that opens column selector or educational popup
+    - Inserts {{col('name')}} or {{col(0)}} at cursor position
+    - Toggles between name/index mode
+    - Session persistence for mode preference
+    """
+    
+    def __init__(
+        self,
+        parent,
+        target_entry: ctk.CTkEntry,
+        data_sample: Optional[pd.DataFrame] = None,
+        on_load_data: Optional[Callable] = None
+    ):
+        # Icon button always visible
+        # Shows educational popup if no data
+        # Shows column selector if data available
+```
+
+**Key Features:**
+- **Icon-based trigger:** \ud83d\udcca button next to text inputs
+- **Progressive disclosure:** Educational popup explains feature before use
+- **Insert at cursor:** Uses `tk.INSERT` for natural text editing behavior
+- **Session persistence:** Remembers name/index preference across uses
+- **Optional integration:** Can be added to any text input field
+
+---
+
+### **Educational Popup Pattern**
+
+**When:** User clicks \ud83d\udcca without data loaded
+
+**Purpose:** Explain feature and provide data loading action
+
+```python
+class EducationalPopup(ctk.CTkToplevel):
+    """
+    Explains template variable system
+    - What: {{col('name')}} and {{col(0)}} syntax
+    - Why: When to use names vs indexes
+    - How: "Load Data Sample" button for immediate action
+    """
+```
+
+**Content Structure:**
+1. Feature explanation (what it does)
+2. Syntax examples (how to use)
+3. Usage example (template → result)
+4. Guidance (when to use names vs indexes)
+5. Action button (load data sample)
+
+**Benefits:**
+- ✅ **Self-documenting:** Users learn by discovery
+- ✅ **Actionable:** Direct path to enable feature
+- ✅ **Non-blocking:** Can be dismissed without action
+
+---
+
+### **Column Selector with Mode Toggle**
+
+**Design Decision:** Single column with toggle instead of two-column layout
+
+**Rationale:**
+- **Simplicity:** One column eliminates alignment issues
+- **Progressive disclosure:** Advanced feature (indexes) hidden by default
+- **Cleaner UI:** Less visual clutter, easier to understand
+- **Better UX:** Can't accidentally click wrong column
+
+**Implementation:**
+
+```python
+class ColumnSelectorPopup(ctk.CTkToplevel):
+    _preferred_mode = "name"  # Class variable for session persistence
+    
+    def __init__(self, parent, data_sample, on_select_callback):
+        self.mode = ColumnSelectorPopup._preferred_mode  # Load preference
+        
+        # Single column layout
+        # Mode toggle in header: "Switch to Index ⚙"
+        # Rows show: "email" or "0 (email)" based on mode
+    
+    def toggle_mode(self, event):
+        self.mode = "index" if self.mode == "name" else "name"
+        ColumnSelectorPopup._preferred_mode = self.mode  # Save preference
+        self.refresh_table()
+```
+
+**Mode Toggle Design:**
+- **Location:** Right side of header row
+- **Text:** "Switch to Index ⚙" / "Switch to Name ⚙"
+- **Interaction:** Clickable label with hover effect
+- **Feedback:** Text changes immediately, table refreshes
+
+**Display Modes:**
+
+**Name Mode (Default):**
+```
+Header: "Column Name"
+Rows:   "email", "firstname", "lastname"
+Insert: {{col('email')}}
+```
+
+**Index Mode:**
+```
+Header: "Index (Column Name)"
+Rows:   "0 (email)", "1 (firstname)", "2 (lastname)"
+Insert: {{col(0)}}
+```
+
+---
+
+### **Session Persistence Pattern**
+
+**Problem:** Users frustrated by repeated mode switching
+
+**Solution:** Class-level variable persists preference across popup instances
+
+```python
+class ColumnSelectorPopup(ctk.CTkToplevel):
+    _preferred_mode = "name"  # Shared across all instances
+    
+    def __init__(self, ...):
+        self.mode = ColumnSelectorPopup._preferred_mode  # Load
+    
+    def toggle_mode(self, ...):
+        ColumnSelectorPopup._preferred_mode = self.mode  # Save
+```
+
+**Scope:** Session-level (resets on app restart)
+
+**Benefits:**
+- ✅ **Minimal code:** Single class variable
+- ✅ **No file I/O:** In-memory only
+- ✅ **Reasonable default:** Resets to "name" on restart
+- ✅ **User-friendly:** Remembers choice during session
+
+---
+
+### **Integration Pattern**
+
+**Adding to Text Input Fields:**
+
+```python
+class TextInputField(ctk.CTkFrame):
+    def __init__(
+        self,
+        parent,
+        label: str,
+        placeholder: str = "",
+        enable_expression_helper: bool = False  # Optional flag
+    ):
+        # ... existing code ...
+        
+        if enable_expression_helper:
+            self.expression_helper = DataExpressionHelper(
+                self.input_container,
+                target_entry=self.entry,
+                data_sample=None  # Set later via set_data_sample()
+            )
+            self.expression_helper.pack(side="right", padx=(5, 0))
+```
+
+**Data Sample Propagation:**
+
+```python
+# WorkflowEditorView loads data sample
+def load_data_sample(self):
+    loader = DataLoader()
+    result = loader.load_data(filepath)
+    self.data_sample = result['data'].head(10)  # First 10 rows
+    self.propagate_data_sample()
+
+def propagate_data_sample(self):
+    # Pass to all expression helpers in actions list
+    self.actions_list.set_data_sample(self.data_sample)
+```
+
+---
+
+### **Design Principles Applied**
+
+**YAGNI Compliance:**
+- ✅ **No two-column layout:** Simpler single-column design
+- ✅ **No complex alignment:** One column always works
+- ✅ **No file persistence:** Session-level is sufficient
+- ✅ **Built-in cursor insertion:** Uses tk.INSERT (no custom tracking)
+
+**Progressive Disclosure:**
+- ✅ **Icon-based:** Helper doesn't clutter main UI
+- ✅ **Educational popup:** Explains feature before use
+- ✅ **Mode toggle:** Advanced feature (indexes) hidden by default
+- ✅ **Optional integration:** Only added where needed
+
+**User Experience:**
+- ✅ **Self-documenting:** Educational popup explains everything
+- ✅ **Actionable:** "Load Data Sample" button in popup
+- ✅ **Persistent:** Remembers mode preference
+- ✅ **Natural editing:** Inserts at cursor position
+
+---
+
+### **Modus Operandi Compliance**
+
+**✅ Architecture-first approach:** Discussed single-column vs two-column before implementation  
+**✅ Best practices validation:** Progressive disclosure, session persistence patterns  
+**✅ YAGNI principle:** Minimal code, no over-engineering  
+**✅ Future maintainability:** Easy to extend (add more modes, save to preferences file)  
+**✅ Technical debt awareness:** Zero debt - clean, simple implementation
+
+---
+
+*This pattern provides a reusable, user-friendly way to insert template variables without requiring users to memorize syntax or understand the template system upfront.*
+
+---
+
+## Domain-Specific Field Component Pattern
+
+### **Purpose-Built Components Over Generic Ones**
+
+**Problem Solved:** Generic field components with conditional logic created complexity
+
+**Solution:** Domain-specific components for each action field type
+
+---
+
+### **Component Architecture**
+
+**Pattern:** One component per action field purpose
+
+```
+ui/components/fields/
+├── action_value_input.py          # Value field with expression helper
+├── action_url_input.py            # URL field (future)
+├── action_selector_input.py       # Selector field (future)
+├── text_input.py                  # Generic text (legacy)
+├── dropdown.py                    # Generic dropdown (legacy)
+├── selector_picker.py             # Selector with picker
+├── key_picker.py                  # Key capture
+├── number_input.py                # Numeric validation
+└── data_expression_helper.py      # Reusable utility
+```
+
+**Benefits:**
+- ✅ **Zero ambiguity:** Component name = exact purpose
+- ✅ **No conditionals:** Each component knows its requirements
+- ✅ **Easy discovery:** "Where's value input?" → `action_value_input.py`
+- ✅ **Self-documenting:** Code reads like domain language
+- ✅ **Future-proof:** Add new field = create new component
+
+---
+
+### **ActionValueInput Implementation**
+
+**Purpose:** Value field with integrated expression helper and help button
+
+```python
+class ActionValueInput(ctk.CTkFrame):
+    def __init__(self, parent, label, placeholder, optional, on_load_data=None):
+        # Label
+        self.label = ctk.CTkLabel(self, text=label)
+        
+        # Container for entry + helpers
+        input_container = ctk.CTkFrame(self, fg_color="transparent")
+        
+        # Entry field
+        self.entry = ctk.CTkEntry(input_container, placeholder_text=placeholder)
+        
+        # Expression helper (📊)
+        self.helper = DataExpressionHelper(
+            input_container,
+            target_entry=self.entry,
+            data_sample=get_workflow_data_sample(),
+            on_load_data=self.on_load_data_clicked
+        )
+        
+        # Help button (❓)
+        help_btn = ctk.CTkButton(
+            input_container,
+            text="❓",
+            width=30,
+            command=self.show_help
+        )
+```
+
+**Features:**
+- Entry field for text input
+- Expression helper (📊) for column insertion
+- Help button (❓) for educational popup
+- Callback for data loading
+
+---
+
+### **Data Sample Status Indicator**
+
+**Purpose:** Persistent status display with load/clear/replace actions
+
+**Component:** `ui/components/data_sample_status.py`
+
+```python
+class DataSampleStatus(ctk.CTkFrame):
+    def __init__(self, parent, on_load: Callable, on_change: Callable):
+        # Displays current data sample state
+        # Provides actions based on state
+```
+
+**States:**
+
+**No Data:**
+```
+[⚠️ No sample data loaded | Load Data Sample]
+```
+
+**Data Loaded:**
+```
+[✅ sample.csv (10 rows) | ✕ | Replace]
+```
+
+**Benefits:**
+- ✅ **Always visible:** User always knows data state
+- ✅ **Actionable:** Click to load/clear/replace
+- ✅ **Clear feedback:** Visual status indicators
+- ✅ **Reusable:** Can be used in other pages
+
+---
+
+### **Session-Level Data Sample Service**
+
+**Purpose:** Shared data sample storage across all expression helpers
+
+**Service:** `src/app_services.py`
+
+```python
+# Session-level workflow data sample (not persisted)
+_workflow_data_sample = None
+
+def get_workflow_data_sample():
+    """Get current workflow editing data sample"""
+    return _workflow_data_sample
+
+def set_workflow_data_sample(data_sample):
+    """Set workflow editing data sample"""
+    global _workflow_data_sample
+    _workflow_data_sample = data_sample
+
+def clear_workflow_data_sample():
+    """Clear data sample (on workflow save/cancel)"""
+    global _workflow_data_sample
+    _workflow_data_sample = None
+```
+
+**Lifecycle:**
+- **Set:** When user loads data sample
+- **Get:** When expression helper needs data
+- **Clear:** On workflow save/cancel or app shutdown
+
+**Benefits:**
+- ✅ **No prop drilling:** Components access via service
+- ✅ **Single source of truth:** All helpers share same data
+- ✅ **Clean lifecycle:** Explicit set/clear
+- ✅ **Session-scoped:** Resets on app restart
+
+---
+
+### **Callback Pattern for Data Loading**
+
+**Purpose:** Enable educational popup to trigger data loading in parent
+
+**Flow:**
+```
+ActionValueInput → ActionsList → WorkflowEditorView
+     ↓                ↓                ↓
+on_load_data    on_load_data    load_data_sample()
+```
+
+**Implementation:**
+
+```python
+# ActionValueInput - receives and wires callback
+class ActionValueInput:
+    def __init__(self, parent, label, placeholder, optional, on_load_data=None):
+        self.on_load_data_callback = on_load_data
+        self.helper = DataExpressionHelper(
+            container,
+            target_entry=self.entry,
+            data_sample=get_workflow_data_sample(),
+            on_load_data=self.on_load_data_clicked
+        )
+
+# ActionsList - passes callback through
+class ActionsList:
+    def __init__(self, parent, on_actions_changed, on_load_data):
+        self.on_load_data = on_load_data
+
+# WorkflowEditorView - owns data loading
+class WorkflowEditorView:
+    def setup_ui(self):
+        self.actions_list = ActionsList(
+            content,
+            self.on_actions_changed,
+            on_load_data=self.load_data_sample
+        )
+```
+
+**Benefits:**
+- ✅ **Inversion of control:** Child doesn't know about parent
+- ✅ **Loose coupling:** Components communicate via callbacks
+- ✅ **Follows existing pattern:** Same as element picker
+- ✅ **Easy to test:** Mock callbacks for testing
+
+---
+
+### **User Flows**
+
+**Flow 1: Via Help Button (❓)**
+```
+User clicks ❓ → Educational popup → "Load Data Sample" → File picker → Status shows ✅
+```
+
+**Flow 2: Via Expression Helper (📊) - No Data**
+```
+User clicks 📊 → Educational popup → "Load Data Sample" → File picker → Status shows ✅
+```
+
+**Flow 3: Via Expression Helper (📊) - Data Loaded**
+```
+User clicks 📊 → Column selector → Select column → Expression inserted
+```
+
+**Flow 4: Via Status Indicator - No Data**
+```
+User clicks "Load Data Sample" → File picker → Status shows ✅
+```
+
+**Flow 5: Clear Data**
+```
+User clicks ✕ → Data cleared → Status shows ⚠️
+```
+
+**Flow 6: Replace Data**
+```
+User clicks "Replace" → File picker → New data loaded → Status updates
+```
+
+---
+
+### **Modus Operandi Compliance**
+
+**✅ Architecture-first approach:** Discussed domain-specific vs generic components  
+**✅ Best practices validation:** Callback pattern, service layer, reusable components  
+**✅ YAGNI principle:** Minimal code, no over-engineering  
+**✅ Future maintainability:** Easy to add new field types  
+**✅ Technical debt awareness:** Zero debt - clean implementation  
+**✅ Separation of concerns:** UI, service, business logic properly separated
+
+---
+
+*This pattern eliminates generic component complexity through purpose-built components. Each field type has a dedicated component that knows exactly what it needs, making the codebase self-documenting and easy to maintain.*
+
+---
+
+## Enhanced Navigation & State Management Architecture
+
+### **Intelligent Navigation with State Persistence**
+
+**Problem Solved:** Users lost navigation context and workflow selections across sessions, creating friction in workflow management
+
+**Solution:** Hybrid state management with intelligent navigation callbacks and menu highlighting
+
+---
+
+### **Hybrid State Management Pattern**
+
+**Design Decision:** Performance-optimized approach balancing immediate persistence with session batching
+
+```python
+# src/utils/state_manager.py - Hybrid state management
+def get_last_visited_page() -> str:
+    """Get last visited page with fallback to default"""
+    try:
+        return get_user_preference("last_visited_page", "workflow_management")
+    except Exception:
+        return "workflow_management"
+
+def set_last_visited_page(page_name: str) -> bool:
+    """Set last visited page with immediate persistence"""
+    try:
+        set_user_preference("last_visited_page", page_name)
+        return True
+    except Exception:
+        return False
+
+# Session state for high-frequency updates
+_session_state = {}
+
+def set_session_state(key: str, value):
+    """Set session-level state (persisted on app close)"""
+    _session_state[key] = value
+
+def save_session_to_preferences():
+    """Save session state to preferences on app close"""
+    try:
+        for key, value in _session_state.items():
+            if key.startswith("pref_"):
+                pref_key = key[5:]
+                set_user_preference(pref_key, value)
+    except Exception:
+        pass
+```
+
+**State Categories:**
+- **Immediate Persistence:** Navigation state, workflow selection (low frequency, critical)
+- **Session Batching:** Window size, theme changes (high frequency, non-critical)
+
+**Benefits:**
+- ✅ **Performance Optimized:** Prevents excessive disk I/O during resize operations
+- ✅ **Crash Safe:** Critical navigation state persisted immediately
+- ✅ **Graceful Degradation:** Error handling with fallbacks
+- ✅ **Clean Lifecycle:** Session state saved on app close
+
+---
+
+### **Navigation Callback Pattern**
+
+**Problem Solved:** Pages needed navigation capability without tight coupling to navigation system
+
+**Solution:** Dependency injection via callback pattern with clean interfaces
+
+```python
+# ui/main_layout.py - Navigation callback injection
+class MainLayout:
+    def setup_layout(self):
+        # Register pages with navigation callback
+        for page_config in get_pages():
+            self.page_controller.add_page(
+                page_config["name"], 
+                page_config["class"],
+                navigate_callback=self.navigate_to_page
+            )
+    
+    def navigate_to_page(self, page_name: str, **context) -> None:
+        """Navigation callback for pages with state management"""
+        # Handle state updates based on context
+        if 'workflow_name' in context:
+            set_last_selected_workflow(context['workflow_name'])
+        
+        # Navigate to page (controller handles state and highlighting)
+        self.page_controller.show_page(page_name)
+
+# Pages use callback - NO controller dependency
+class WorkflowExecutionPage(ctk.CTkFrame):
+    def __init__(self, parent, navigate_callback=None):
+        super().__init__(parent)
+        self.navigate_callback = navigate_callback
+    
+    def execute_workflow(self, workflow_name):
+        if self.navigate_callback:
+            self.navigate_callback("workflow_execution", workflow_name=workflow_name)
+```
+
+**Communication Flow:**
+```
+Page Action → Navigation Callback → MainLayout → State Update → Controller → Sidebar Highlighting
+```
+
+**Benefits:**
+- ✅ **Zero Coupling:** Pages don't depend on navigation system
+- ✅ **Clean Testing:** Mock callback for page testing
+- ✅ **Consistent Interface:** All pages get same callback pattern
+- ✅ **State Management:** Centralized in MainLayout
+- ✅ **Context Passing:** Rich navigation context via kwargs
+
+---
+
+### **Controller-Mediated Highlighting**
+
+**Problem Solved:** Menu highlighting needed to update from multiple navigation sources
+
+**Solution:** Controller coordinates highlighting with sidebar directly
+
+```python
+# ui/navigation/controller.py - Enhanced with highlighting
+class PageController:
+    def __init__(self, container: ctk.CTkFrame, sidebar=None):
+        self.container = container
+        self.sidebar = sidebar
+        self.current_page_name: Optional[str] = None
+    
+    def show_page(self, name: str) -> bool:
+        """Show page, update state and highlighting"""
+        # ... existing navigation logic ...
+        
+        self.current_page_name = name
+        
+        # Update state and highlighting
+        set_last_visited_page(name)
+        if self.sidebar and hasattr(self.sidebar, 'update_highlighting'):
+            self.sidebar.update_highlighting(name)
+        
+        return True
+
+# ui/navigation/sidebar.py - Future-proof highlighting
+class SideNav(ctk.CTkFrame):
+    def update_highlighting(self, current_page: str) -> None:
+        """Update menu button highlighting for current page"""
+        for page_name, button in self.menu_buttons.items():
+            if page_name == current_page:
+                button.configure(fg_color="#1f538d")  # Highlighted background
+            else:
+                button.configure(fg_color="transparent")  # Normal
+```
+
+**Design Rationale:**
+- **Background Highlighting:** Future-proof for icon-based menus
+- **Controller Mediation:** Single point of highlighting control
+- **Direct Communication:** Simple method call, no event complexity
+
+**Benefits:**
+- ✅ **Future-Proof:** Works with buttons, icons, or any menu design
+- ✅ **Consistent Updates:** All navigation sources update highlighting
+- ✅ **Simple Implementation:** Direct method call, no event system
+- ✅ **Visual Feedback:** Clear indication of current page
+
+---
+
+### **Smart Default Page Routing**
+
+**Problem Solved:** New vs returning users needed different default pages
+
+**Solution:** State-based default page selection with user experience optimization
+
+```python
+# ui/main_layout.py - Smart default routing
+def setup_layout(self):
+    # ... component setup ...
+    
+    # Show default page based on user state
+    default_page = get_last_visited_page()  # Returns "workflow_management" for new users
+    self.page_controller.show_page(default_page)
+
+# src/core/user_preferences.py - Enhanced defaults
+DEFAULT_PREFERENCES = {
+    "theme": "light",
+    "lastSelectedTask": None,
+    "last_visited_page": "workflow_management",  # New users start here
+    "last_selected_workflow": "",
+    "wizard_mode": True
+}
+```
+
+**User Experience Flow:**
+- **New Users:** Start on workflow_management (can create workflows)
+- **Returning Users:** Resume exactly where they left off
+- **Fallback:** Always defaults to workflow_management if state corrupted
+
+**Benefits:**
+- ✅ **User-Centric:** New users see relevant page immediately
+- ✅ **Session Continuity:** Returning users resume seamlessly
+- ✅ **Graceful Fallback:** Corrupted state handled elegantly
+
+---
+
+### **Workflow Selection Persistence**
+
+**Problem Solved:** Users lost workflow context when navigating between pages
+
+**Solution:** Workflow selection state with automatic restoration
+
+```python
+# ui/pages/workflow_execution.py - State-aware execution page
+class WorkflowExecutionPage(ctk.CTkFrame):
+    def on_show(self):
+        """Called when page becomes visible - refresh and load state"""
+        self.refresh_workflows()
+        
+        # Load last selected workflow
+        last_workflow = get_last_selected_workflow()
+        if last_workflow and last_workflow in self.workflows:
+            self.workflow_combo.set(last_workflow)
+    
+    def on_workflow_selected(self, workflow_name: str):
+        """Handle workflow selection from dropdown"""
+        if workflow_name and workflow_name != "No workflows found":
+            set_last_selected_workflow(workflow_name)
+```
+
+**Integration Points:**
+- **Execute Buttons:** Update state before navigation
+- **Dropdown Selection:** Persist choice immediately
+- **Page Lifecycle:** Restore selection on page show
+
+**Benefits:**
+- ✅ **Context Preservation:** Workflow selection survives navigation
+- ✅ **Seamless Flow:** Execute buttons pre-select correct workflow
+- ✅ **User Efficiency:** No repeated workflow selection
+
+---
+
+### **Execute Button Integration**
+
+**Problem Solved:** Users needed direct workflow-to-execution navigation
+
+**Solution:** Execute buttons with state updates and navigation
+
+```python
+# ui/components/workflow_list_view.py - Execute button integration
+def create_workflow_card(self, workflow: dict):
+    """Create workflow card with execute button"""
+    # ... existing card setup ...
+    
+    # Button container (right side)
+    button_container = ctk.CTkFrame(row, fg_color="transparent")
+    button_container.pack(side="right")
+    
+    # Execute button (if callback provided)
+    if self.on_execute:
+        execute_button = ctk.CTkButton(
+            button_container,
+            text="▶️",
+            width=40,
+            command=lambda: self.on_execute(workflow['name'])
+        )
+        execute_button.pack(side="right", padx=(0, 5))
+
+# ui/pages/workflow_management.py - Execute workflow navigation
+def execute_workflow(self, workflow_name: str):
+    """Execute workflow - navigate to execution page"""
+    if self.navigate_callback:
+        self.navigate_callback("workflow_execution", workflow_name=workflow_name)
+```
+
+**User Flow:**
+```
+Workflow List → Click ▶️ → Update State → Navigate → Execution Page → Workflow Pre-selected
+```
+
+**Benefits:**
+- ✅ **Direct Navigation:** One-click workflow execution
+- ✅ **State Continuity:** Workflow context preserved across navigation
+- ✅ **Visual Clarity:** Clear execute action with ▶️ icon
+
+---
+
+### **Page Lifecycle Enhancement**
+
+**Problem Solved:** Pages needed to respond to navigation events and state changes
+
+**Solution:** Enhanced lifecycle hooks with state awareness
+
+```python
+# ui/navigation/controller.py - Enhanced lifecycle
+def show_page(self, name: str) -> bool:
+    """Show page with enhanced lifecycle and state management"""
+    # ... existing logic ...
+    
+    # Call lifecycle hook if page implements it
+    if hasattr(page, 'on_show'):
+        page.on_show()
+    
+    # Update state and highlighting
+    self.current_page_name = name
+    set_last_visited_page(name)
+    if self.sidebar:
+        self.sidebar.update_highlighting(name)
+
+# Pages implement enhanced lifecycle
+class WorkflowExecutionPage(ctk.CTkFrame):
+    def on_show(self):
+        """Enhanced lifecycle with state restoration"""
+        self.refresh_workflows()
+        
+        # Restore workflow selection state
+        last_workflow = get_last_selected_workflow()
+        if last_workflow and last_workflow in self.workflows:
+            self.workflow_combo.set(last_workflow)
+```
+
+**Lifecycle Events:**
+- **on_show():** Page becomes visible (data refresh, state restoration)
+- **State Updates:** Automatic on navigation
+- **Highlighting:** Automatic menu updates
+
+**Benefits:**
+- ✅ **Data Freshness:** Pages refresh data when shown
+- ✅ **State Restoration:** User context preserved
+- ✅ **Automatic Updates:** No manual state management needed
+
+---
+
+### **Error Handling & Graceful Degradation**
+
+**Problem Solved:** State corruption or I/O errors could break navigation
+
+**Solution:** Comprehensive error handling with fallbacks
+
+```python
+# src/utils/state_manager.py - Error handling
+def get_last_visited_page() -> str:
+    """Get last visited page with fallback to default"""
+    try:
+        return get_user_preference("last_visited_page", "workflow_management")
+    except Exception:
+        return "workflow_management"  # Safe fallback
+
+def set_last_visited_page(page_name: str) -> bool:
+    """Set last visited page with error handling"""
+    try:
+        set_user_preference("last_visited_page", page_name)
+        return True
+    except Exception:
+        return False  # Graceful degradation
+
+def save_session_to_preferences():
+    """Save session state with error handling"""
+    try:
+        for key, value in _session_state.items():
+            if key.startswith("pref_"):
+                pref_key = key[5:]
+                set_user_preference(pref_key, value)
+    except Exception:
+        pass  # Continue without session save
+```
+
+**Error Scenarios Handled:**
+- **Corrupted Preferences:** Fallback to defaults
+- **File I/O Errors:** Continue without persistence
+- **Missing Workflows:** Handle empty workflow lists
+- **Invalid State:** Reset to safe defaults
+
+**Benefits:**
+- ✅ **Crash Prevention:** No exceptions propagate to UI
+- ✅ **Graceful Degradation:** App continues functioning
+- ✅ **User Experience:** Seamless operation despite errors
+- ✅ **Recovery:** Automatic fallback to working state
+
+---
+
+### **Architecture Benefits**
+
+**Clean Separation:**
+- **State Management:** Isolated in utilities layer
+- **Navigation Logic:** Contained in controller
+- **UI Rendering:** Separate in sidebar and pages
+- **Business Logic:** Unaffected by navigation changes
+
+**Scalability:**
+- **Add Pages:** Create class, add to registry, gets navigation automatically
+- **Add State:** Extend state manager, no UI changes needed
+- **Change Navigation:** Modify callback implementation, pages unaffected
+- **Menu Redesign:** Highlighting adapts to any menu structure
+
+**Maintainability:**
+- **Single Responsibility:** Each component has clear purpose
+- **Loose Coupling:** Pages independent of navigation system
+- **Easy Testing:** Mock callbacks and state for testing
+- **Clear Dependencies:** Explicit dependency injection
+
+**Performance:**
+- **Hybrid State:** Optimized for different update frequencies
+- **Immediate Critical State:** Navigation persisted instantly
+- **Batched Non-Critical:** Session state saved on close
+- **Minimal Overhead:** Lightweight state management
+
+---
+
+### **Modus Operandi Compliance**
+
+**✅ Architecture-First Approach:** Complete design before implementation  
+**✅ Best Practices Validation:** Dependency injection, error handling, separation of concerns  
+**✅ Technical Debt Assessment:** Zero debt - clean, maintainable implementation  
+**✅ Future Maintainability:** Easy to extend, modify, and test  
+**✅ Scalability Considerations:** Handles growth from 5 to 50+ pages seamlessly
+
+---
+
+*This enhanced navigation architecture provides intelligent state management while maintaining clean separation of concerns. The hybrid state approach optimizes performance while ensuring critical navigation context is never lost, creating a seamless user experience that scales with application growth.*

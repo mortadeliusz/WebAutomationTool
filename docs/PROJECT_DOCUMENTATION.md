@@ -10,9 +10,9 @@
 
 ## Current Implementation Status
 
-**Phase:** Component-Driven Action Editor Complete ✅  
+**Phase:** Wizard Mode Implementation Complete ✅  
 **Date:** January 2025  
-**Next Phase:** Data Integration and Workflow Execution
+**Next Phase:** Advanced Features and Core Integration
 
 ### **Technology Stack - FINAL**
 - **Language:** Python 3.11+
@@ -42,12 +42,30 @@ WebAutomationTool/
 │   │   ├── controller.py           # Page lifecycle and navigation logic
 │   │   ├── registry.py             # Central page configuration
 │   │   └── sidebar.py              # Navigation UI component
-│   └── pages/
-│       ├── workflow_execution.py   # Workflow execution interface
-│       ├── workflow_management.py  # Workflow creation and editing
-│       ├── subscription.py         # License management
-│       ├── test_page.py            # Element picker testing
-│       └── browser_test.py         # Browser integration testing
+│   ├── pages/
+│   │   ├── workflow_execution.py   # Workflow execution interface
+│   │   ├── workflow_management.py  # Workflow creation and editing
+│   │   ├── subscription.py         # License management
+│   │   ├── test_page.py            # Element picker testing
+│   │   └── browser_test.py         # Browser integration testing
+│   └── components/
+│       ├── workflow_list_view.py       # Workflow list with execute buttons
+│       ├── single_page_editor_view.py  # Full workflow editor
+│       ├── wizard_editor_view.py       # Step-by-step wizard editor
+│       ├── two_option_toggle.py        # Generic toggle component
+│       ├── browser_config_section.py   # Browser lifecycle management
+│       ├── actions_list.py             # Inline action editor
+│       ├── data_sample_status.py       # Data sample status indicator
+│       ├── data_table.py               # Data preview component
+│       ├── status_bar.py
+│       └── fields/
+│           ├── action_value_input.py   # Value field with expression helper
+│           ├── text_input.py
+│           ├── dropdown.py
+│           ├── selector_picker.py
+│           ├── key_picker.py           # Key capture with 🎹 button
+│           ├── number_input.py         # Numeric input with validation
+│           └── data_expression_helper.py  # Column selector for templates
 ├── src/
 │   ├── app_services.py             # Global service management
 │   ├── core/                       # Production-ready business logic
@@ -60,6 +78,7 @@ WebAutomationTool/
 │   │   ├── workflow_executor.py    # Workflow orchestration
 │   │   └── element_picker_toggle.py # Interactive element selection
 │   └── utils/
+│       ├── state_manager.py        # Navigation and wizard mode state
 │       ├── browser_detector.py     # Cross-platform browser discovery
 │       └── workflow_files.py       # Workflow file operations
 ├── user_data/
@@ -133,10 +152,10 @@ App (CTk + AsyncCTk)
 
 ## Core Business Logic Status
 
-### **✅ Production-Ready Modules (9 Modules)**
+### **✅ Production-Ready Modules (12 Modules)**
 All core business logic modules have been extracted and are production-ready:
 
-1. **User Preferences** - JSON-based settings persistence
+1. **User Preferences** - JSON-based settings persistence with wizard mode defaults
 2. **Workflow Files** - Workflow definition save/load operations  
 3. **Template Processing** - `resolve_expression()` utility for `{{col('Name')}}` resolution
 4. **Data Loader** - Multi-format data support (CSV, Excel, JSON, YAML)
@@ -146,6 +165,8 @@ All core business logic modules have been extracted and are production-ready:
 8. **Action Execution** - Stateless action execution function
 9. **Workflow Executor** - Row iteration and browser initialization
 10. **Element Picker** - Interactive element selection with toggle-based JavaScript injection
+11. **State Manager** - Navigation and wizard mode state management with hybrid persistence
+12. **App Services** - Session-level data sample service and global resource management
 
 ### **Major Breakthroughs Achieved**
 
@@ -160,6 +181,13 @@ All core business logic modules have been extracted and are production-ready:
 - **Pattern:** `@async_handler` decorator for button callbacks
 - **Architecture:** `AsyncCTk` mixin with `async_mainloop()`
 - **Result:** Native async/await in CustomTkinter without blocking operations
+
+#### **Wizard Mode Implementation**
+- **TwoOptionToggle Component:** Generic toggle with clickable label pattern and hover effects
+- **Three-View Management:** List ↔ Single Page Editor ↔ Wizard Editor switching
+- **Controller Pattern:** WorkflowManagementPage manages mode and view switching
+- **Immediate Persistence:** Wizard mode preference saved instantly
+- **Clean Separation:** UI component separate from business logic
 
 #### **Toggle-Based Element Picker**
 - **Problem Solved:** JavaScript re-injection causing variable conflicts
@@ -186,22 +214,80 @@ All core business logic modules have been extracted and are production-ready:
 - **Column by index:** `{{col(0)}}` (0-based indexing)
 - **Type-based resolution:** String parameter = column name, Number parameter = column index
 
+## Wizard Mode Architecture
+
+### **✅ Implemented Components**
+
+**TwoOptionToggle** (`ui/components/two_option_toggle.py`)
+- Generic two-option toggle with clickable label pattern
+- Hover effects and callback pattern for parent notification
+- Reusable for any two-option scenario
+
+**WizardEditorView** (`ui/components/wizard_editor_view.py`)
+- Placeholder wizard editor for step-by-step workflow creation
+- Same interface as SinglePageEditorView (on_save, on_cancel callbacks)
+- Ready for wizard step implementation
+
+**SinglePageEditorView** (`ui/components/single_page_editor_view.py`)
+- Full-featured workflow editor with all existing functionality
+- Browser configuration, actions list, data sample integration
+- Immediate disk persistence on action saves
+
+**Enhanced WorkflowManagementPage** (`ui/pages/workflow_management.py`)
+- Three-view management with controller pattern
+- Mode toggle integration with immediate preference persistence
+- View switching based on wizard mode preference
+
+### **User Experience**
+- **New users:** Start with wizard mode enabled by default
+- **Mode switching:** Toggle between "Wizard Mode" and "Single Page Mode"
+- **State persistence:** Mode preference survives app restarts
+- **Seamless navigation:** List → appropriate editor based on mode
+
+## Wizard Mode Architecture
+
+### **✅ Implemented Components**
+
+**TwoOptionToggle** (`ui/components/two_option_toggle.py`)
+- Generic two-option toggle with clickable label pattern
+- Hover effects and callback pattern for parent notification
+- Reusable for any two-option scenario
+
+**WizardEditorView** (`ui/components/wizard_editor_view.py`)
+- Placeholder wizard editor for step-by-step workflow creation
+- Same interface as SinglePageEditorView (on_save, on_cancel callbacks)
+- Ready for wizard step implementation
+
+**SinglePageEditorView** (`ui/components/single_page_editor_view.py`)
+- Full-featured workflow editor with all existing functionality
+- Browser configuration, actions list, data sample integration
+- Immediate disk persistence on action saves
+
+**Enhanced WorkflowManagementPage** (`ui/pages/workflow_management.py`)
+- Three-view management with controller pattern
+- Mode toggle integration with immediate preference persistence
+- View switching based on wizard mode preference
+
+### **User Experience**
+- **New users:** Start with wizard mode enabled by default
+- **Mode switching:** Toggle between "Wizard Mode" and "Single Page Mode"
+- **State persistence:** Mode preference survives app restarts
+- **Seamless navigation:** List → appropriate editor based on mode
+
 ## Next Development Phase
 
 ### **Immediate Tasks**
-1. **Integrate data loading** with workflow execution interface
-2. **Connect template evaluator** with action execution for variable processing
-3. **Implement execution progress** feedback and status reporting
-4. **Add comprehensive error handling** UI with recovery options
-5. **Complete user preferences** integration with settings UI
-6. **Finalize browser lifecycle** management and cleanup
+1. **Implement wizard steps** - Replace placeholder with actual step-by-step UI
+2. **Advanced workflow features** - Conditional logic, loops, error handling
+3. **Enhanced data integration** - Advanced template processing and validation
+4. **Performance optimization** - Large dataset handling and execution monitoring
+5. **User experience polish** - Animations, better feedback, accessibility
 
-### **Integration Points**
-- **Data flow:** UI → Core modules → Browser → Results → UI
-- **Error handling:** Core module errors → UI display → User actions
-- **Progress tracking:** Long operations → UI updates → User feedback
-- **Resource management:** UI lifecycle → Browser cleanup → App shutdown
-- **Async operations:** All browser operations non-blocking with proper UI updates
+### **Architecture Extensions**
+- **Wizard step system:** Modular step components for different action types
+- **Advanced templates:** Conditional expressions and data transformation
+- **Execution monitoring:** Real-time progress and detailed error reporting
+- **Plugin architecture:** Extensible action types and custom integrations
 
 ## Quality Standards
 
@@ -219,12 +305,14 @@ All core business logic modules have been extracted and are production-ready:
 - **Data processing:** 100+ rows per minute
 
 ### **User Experience Goals**
-- **Intuitive navigation** - Clean sidebar with page switching
-- **State preservation** - Form data persists across page switches
+- **Intuitive navigation** - Clean sidebar with page switching and menu highlighting
+- **State preservation** - Form data and preferences persist across sessions
 - **Visual consistency** - Professional dark theme with proper margins
 - **Responsive interface** - No blocking operations on UI thread
 - **Reliable element picker** - Consistent behavior across multiple uses
+- **Progressive disclosure** - Wizard mode for beginners, single page for power users
+- **Seamless mode switching** - Toggle between editing modes without losing context
 
 ---
 
-*Current implementation provides solid foundation for full application development. Clean UI architecture eliminates technical debt and core business logic is production-ready. All components follow proper separation of concerns and established design patterns.*
+*Current implementation provides complete wizard mode foundation with clean architecture. All components follow proper separation of concerns and established design patterns. Ready for wizard step implementation and advanced features.*

@@ -1,0 +1,32 @@
+{
+  "name": "google test",
+  "browsers": {
+    "main": {
+      "browser_type": "chrome",
+      "starting_url": "http://www.google.com"
+    }
+  },
+  "actions": [
+    {
+      "type": "fill_field",
+      "browser_alias": "main",
+      "selector": "//form//textarea",
+      "value": "siema elo",
+      "description": "seacrh phrase123"
+    },
+    {
+      "type": "click",
+      "browser_alias": "main",
+      "selector": "//form//input[@name=\"btnK\"]",
+      "description": "click search"
+    },
+    {
+      "type": "wait_seconds",
+      "browser_alias": "main",
+      "seconds": "10",
+      "description": "wait 10 seconds"
+    }
+  ],
+  "created_at": "2026-01-14T13:27:11.490279",
+  "modified_at": "2026-01-19T11:21:06.746244"
+}

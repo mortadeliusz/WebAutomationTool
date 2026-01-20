@@ -37,8 +37,30 @@ async def cleanup_services():
     if _browser_controller:
         await _browser_controller.stop()
         _browser_controller = None
+    clear_workflow_data_sample()
 
 def reset_services():
     """Reset services for testing purposes"""
     global _browser_controller
     _browser_controller = None
+
+
+# Session-level workflow data sample (not persisted)
+_workflow_data_sample = None
+
+
+def get_workflow_data_sample():
+    """Get current workflow editing data sample"""
+    return _workflow_data_sample
+
+
+def set_workflow_data_sample(data_sample):
+    """Set workflow editing data sample"""
+    global _workflow_data_sample
+    _workflow_data_sample = data_sample
+
+
+def clear_workflow_data_sample():
+    """Clear data sample (on workflow save/cancel)"""
+    global _workflow_data_sample
+    _workflow_data_sample = None
