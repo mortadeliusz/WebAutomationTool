@@ -1,5 +1,5 @@
 """
-Workflow Editor View - Full-screen workflow editing interface
+Single Page Editor View - Full-screen workflow editing interface
 """
 
 import customtkinter as ctk
@@ -9,7 +9,7 @@ from ui.components.browser_config_section import BrowserConfigSection
 from ui.components.actions_list import ActionsList
 
 
-class WorkflowEditorView(ctk.CTkFrame):
+class SinglePageEditorView(ctk.CTkFrame):
     def __init__(
         self, 
         parent,

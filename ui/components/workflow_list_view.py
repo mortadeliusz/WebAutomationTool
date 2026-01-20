@@ -13,12 +13,14 @@ class WorkflowListView(ctk.CTkFrame):
         parent, 
         on_edit: Callable[[str], None],
         on_new: Callable[[], None],
-        on_delete: Callable[[str], None]
+        on_delete: Callable[[str], None],
+        on_execute: Optional[Callable[[str], None]] = None
     ):
         super().__init__(parent)
         self.on_edit = on_edit
         self.on_new = on_new
         self.on_delete = on_delete
+        self.on_execute = on_execute
         self.setup_ui()
         self.refresh()
     
@@ -114,9 +116,23 @@ class WorkflowListView(ctk.CTkFrame):
         details_label.pack(anchor="w")
         details_label.bind("<Button-1>", lambda e: self.on_edit(workflow_name))
         
-        # Delete button (right side, fixed width)
+        # Button container (right side)
+        button_container = ctk.CTkFrame(row, fg_color="transparent")
+        button_container.pack(side="right")
+        
+        # Execute button (if callback provided)
+        if self.on_execute:
+            execute_button = ctk.CTkButton(
+                button_container,
+                text="▶️",
+                width=40,
+                command=lambda: self.on_execute(workflow['name'])
+            )
+            execute_button.pack(side="right", padx=(0, 5))
+        
+        # Delete button
         delete_button = ctk.CTkButton(
-            row,
+            button_container,
             text="🗑️",
             width=40,
             fg_color="darkred",

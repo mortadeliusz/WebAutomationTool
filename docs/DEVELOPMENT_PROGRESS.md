@@ -1,10 +1,56 @@
 # Web Automation Tool - Development Progress Report
 
-## Project Status: Data Expression Helper Integration Complete ✅
+## Project Status: Wizard Mode Implementation Complete ✅
 
 **Date:** January 2025  
-**Phase:** Domain-Specific Field Components with Data Expression Helper  
-**Next Phase:** Expand to URL and Selector Fields
+**Phase:** Wizard Mode Foundation with Three-View Management  
+**Next Phase:** Wizard Step Implementation and Advanced Features
+
+---
+
+### **Latest Major Breakthrough: Wizard Mode Implementation Complete** ✅
+
+**Problem Solved:** Users needed beginner-friendly wizard mode alongside power-user single page editor
+
+**Solution Implemented:**
+- **TwoOptionToggle Component:** Generic toggle with clickable label pattern and hover effects
+- **Three-View Management:** List ↔ Single Page Editor ↔ Wizard Editor switching
+- **Controller Pattern:** WorkflowManagementPage manages mode and view switching
+- **Immediate Persistence:** Wizard mode preference saved instantly
+- **Clean Separation:** UI components separate from business logic
+
+**Implementation:**
+```python
+# TwoOptionToggle - Generic reusable component
+class TwoOptionToggle(ctk.CTkFrame):
+    def __init__(self, parent, option1: str, option2: str, 
+                 initial_option: str, on_change: Callable[[str], None] = None)
+    def on_toggle_clicked(self, event):
+        self.current_option = self.get_other_option()
+        if self.on_change:
+            self.on_change(self.current_option)
+
+# WorkflowManagementPage - Controller pattern
+def on_mode_changed(self, new_option: str):
+    self.wizard_mode = (new_option == "Wizard Mode")
+    set_wizard_mode_preference(self.wizard_mode)
+
+# State Management - Immediate persistence
+def set_wizard_mode_preference(enabled: bool) -> bool:
+    try:
+        set_user_preference("wizard_mode", enabled)
+        return True
+    except Exception:
+        return False
+```
+
+**Benefits Achieved:**
+- ✅ **Progressive Disclosure** - Wizard mode for beginners, single page for power users
+- ✅ **Seamless Switching** - Toggle between modes without losing context
+- ✅ **Clean Architecture** - Reusable toggle component with callback pattern
+- ✅ **Immediate Persistence** - Mode preference survives app restarts
+- ✅ **Future Extensible** - Easy to add more editor modes
+- ✅ **Zero Technical Debt** - Clean separation of concerns throughout
 
 ---
 
@@ -25,7 +71,86 @@
 
 ---
 
-## Major Breakthrough: Browser Lifecycle Management
+## Major Breakthrough: Immediate Disk Persistence Architecture Complete ✅
+
+### **✅ User-Controlled Save Architecture**
+
+**Problem Solved:** Users needed control over when changes persist to disk without losing work
+
+**Solution Implemented:**
+- **Action Save:** Updates workflow in memory + saves to disk immediately
+- **Workflow Save:** Saves current workflow state to disk
+- **User Control:** Manual saves only, no surprise auto-saves
+- **Data Safety:** Every save operation persists immediately
+
+**Implementation:**
+```python
+# ActionsList.save_action() - Action save with immediate persistence
+def save_action(self):
+    # Update actions in memory
+    self.actions[self.editing_index] = action_data
+    # Trigger immediate disk save
+    self.on_actions_changed(self.actions)
+
+# WorkflowEditorView.on_actions_changed() - Auto-save to disk
+def on_actions_changed(self, actions: List[Dict]):
+    self.current_workflow['actions'] = actions
+    save_workflow(self.current_workflow)  # Immediate disk persistence
+
+# WorkflowEditorView.save_workflow() - Metadata save
+def save_workflow(self):
+    self.current_workflow['name'] = self.name_entry.get()
+    save_workflow(self.current_workflow)  # Save complete workflow
+```
+
+**Save Architecture:**
+```
+Action Save → Update memory + Save to disk immediately
+Workflow Save → Save current state to disk
+```
+
+**Benefits Achieved:**
+- ✅ **User control** - Save when ready, not automatically
+- ✅ **Data safety** - Every save persists immediately
+- ✅ **Clear mental model** - Save button = permanent storage
+- ✅ **No data loss** - Frequent saves prevent work loss
+- ✅ **Future-proof** - Supports wizard UI without changes
+
+### **✅ Auto-Close Editor Enhancement**
+
+**Problem Solved:** Users had to manually cancel current editor before editing different action
+
+**Solution Implemented:**
+- **Auto-close behavior** - Click any action while editing auto-closes current editor
+- **Seamless switching** - Opens clicked action immediately
+- **No data loss** - Current editor cancelled cleanly
+
+**Implementation:**
+```python
+def start_edit_action(self, index: int):
+    # Auto-close any existing editor
+    if self.editing_action:
+        self.cancel_edit()
+    
+    # Open new editor
+    self.editing_action = True
+    self.editing_index = index
+    self.refresh_display()
+```
+
+**User Experience:**
+```
+Before: Edit Action 1 → Cancel → Click Action 2 → Edit Action 2
+After:  Edit Action 1 → Click Action 2 → Edit Action 2 (auto-close)
+```
+
+**Benefits Achieved:**
+- ✅ **Seamless switching** - One click to switch editors
+- ✅ **Industry standard** - Matches Gmail/Trello/Notion behavior
+- ✅ **Reduced friction** - No manual cancel step required
+- ✅ **Clean state management** - Single editor active at a time
+
+---
 
 ### **✅ Explicit Browser Control in Workflow Editing**
 
@@ -274,9 +399,9 @@ WebAutomationTool/
 
 ## Core Module Integration Status
 
-### **✅ Production-Ready Business Logic (8 Modules)**
+### **✅ Production-Ready Business Logic (12 Modules)**
 
-1. **User Preferences** - JSON-based settings persistence
+1. **User Preferences** - JSON-based settings persistence with wizard mode defaults
 2. **Workflow Files** - Workflow definition save/load operations  
 3. **Template Evaluator** - `{{col('Name')}}` variable processing
 4. **Data Loader** - Multi-format data support (CSV, Excel, JSON, YAML)
@@ -284,6 +409,10 @@ WebAutomationTool/
 6. **Browser Controller** - Async Playwright browser lifecycle management
 7. **Action Executor** - Individual browser action execution with async support
 8. **Element Picker** - Interactive element selection with toggle-based JavaScript injection
+9. **State Manager** - Navigation and wizard mode state management
+10. **App Services** - Session-level data sample service and global resource management
+11. **Action Handlers** - Registry-based action handler functions
+12. **Workflow Executor** - Row iteration and browser initialization
 
 ### **✅ Service Layer Architecture**
 
@@ -340,30 +469,30 @@ def cleanup_services():
 
 ---
 
-## Next Phase: Core Module Integration
+## Next Phase: Wizard Step Implementation
 
-### **Ready for Integration**
-- ✅ **Complete UI foundation** - Clean architecture with zero technical debt
-- ✅ **Production-ready core modules** - All 9 modules ready for integration
+### **Ready for Advanced Features**
+- ✅ **Complete wizard mode foundation** - Toggle, view switching, and state management
+- ✅ **Production-ready core modules** - All 12 modules ready for integration
 - ✅ **Clean component boundaries** - Proper separation of concerns established
 - ✅ **Type safety** - Comprehensive type hints throughout
 - ✅ **Async support** - Native async/await in CustomTkinter
 - ✅ **Reliable element picker** - Production-ready with toggle pattern
 
-### **Integration Tasks**
-1. **Data Loading Integration** - Connect data loader with workflow execution
-2. **Template Processing** - Integrate template evaluator with action execution
-3. **Progress Feedback** - Real-time execution progress and status
-4. **Error Handling UI** - User-friendly error display and recovery
-5. **User Preferences** - Settings integration with UI
-6. **Browser Management** - Complete browser lifecycle integration
+### **Implementation Tasks**
+1. **Wizard Step System** - Modular step components for different workflow phases
+2. **Step Navigation** - Progress indicators, next/previous, validation
+3. **Advanced Templates** - Conditional expressions and data transformation
+4. **Execution Monitoring** - Real-time progress and detailed error reporting
+5. **Performance Optimization** - Large dataset handling and execution monitoring
+6. **User Experience Polish** - Animations, better feedback, accessibility
 
 ### **Integration Points**
-- **Data flow** - UI components → Core modules → Browser → Results → UI
-- **Error handling** - Core module errors → UI display → User actions
-- **Progress tracking** - Long operations → UI updates → User feedback
-- **State management** - UI state ↔ User preferences ↔ Workflow storage
-- **Async operations** - All browser operations non-blocking with proper UI updates
+- **Wizard Steps** - Modular step components → Workflow definition → Execution
+- **Progressive Disclosure** - Simple wizard → Advanced single page → Power user features
+- **State Management** - Wizard progress ↔ User preferences ↔ Workflow storage
+- **Template System** - Advanced expressions → Data transformation → Dynamic workflows
+- **Execution Pipeline** - Step validation → Browser automation → Progress feedback
 
 ---
 
@@ -389,11 +518,11 @@ def cleanup_services():
 
 ---
 
-**Status:** Component-driven action editor complete with inline editing and element picker integration  
-**Confidence Level:** Very High - Schema-based architecture provides solid foundation  
-**Risk Assessment:** Very Low - Clean component architecture with working async integration
+**Status:** Wizard Mode Implementation Complete ✅  
+**Confidence Level:** Very High - Clean architecture with three-view management  
+**Risk Assessment:** Very Low - Proven patterns with zero technical debt
 
-*Major architectural milestone achieved: Component-driven field system with inline action editing eliminates modal blocking issues while providing extensible, schema-based form generation. Element picker integration works seamlessly with async operations.*
+*Major architectural milestone achieved: Wizard mode foundation provides progressive disclosure for beginners while maintaining power user capabilities. Clean toggle component and controller pattern enable seamless mode switching.*
 
 
 ---

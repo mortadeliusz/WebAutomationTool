@@ -1,0 +1,12 @@
+{
+  "name": "New Workflow",
+  "browsers": {
+    "main": {
+      "browser_type": "chrome",
+      "starting_url": ""
+    }
+  },
+  "actions": [],
+  "created_at": "2026-01-19T11:21:24.340935",
+  "modified_at": "2026-01-19T11:21:24.340935"
+}

@@ -27,12 +27,12 @@
 - Missing data handling with fallback values
 - Data type inference and validation
 
-### **2. Task Creation & Management**
+### **Task Creation & Management**
 
 **Task Structure:**
 - Reusable automation templates stored as JSON
-- Separation of task logic from execution data
-- Version control and metadata tracking
+- Immediate disk persistence on action saves
+- User-controlled save operations (no auto-save)
 - Task sharing and duplication capabilities
 
 **Interactive Task Building:**
@@ -40,6 +40,7 @@
 - Real-time selector generation and validation
 - Action sequence definition with descriptions
 - Template variable integration for data mapping
+- Auto-close editor switching between actions
 
 ### **3. Browser Session Management**
 

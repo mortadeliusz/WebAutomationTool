@@ -5,6 +5,7 @@ Side Navigation - Clean navigation component using PageController
 import customtkinter as ctk
 from ui.navigation.controller import PageController
 from ui.navigation.registry import get_pages
+from ui.components.menu_item_label import MenuItemLabel
 
 
 class SideNav(ctk.CTkFrame):
@@ -13,7 +14,7 @@ class SideNav(ctk.CTkFrame):
     def __init__(self, parent, page_controller: PageController):
         super().__init__(parent, width=200)
         self.controller = page_controller
-        self.buttons = {}
+        self.menu_items = {}  # Store menu item references for highlighting
         
         self.create_navigation()
     
@@ -25,26 +26,20 @@ class SideNav(ctk.CTkFrame):
             name = page_config["name"]
             menu_text = page_config["menu_text"]
             
-            button = ctk.CTkButton(
+            menu_item = MenuItemLabel(
                 self,
                 text=menu_text,
-                command=lambda n=name: self.navigate_to(n)
+                on_click=lambda n=name: self.navigate_to(n)
             )
-            button.pack(pady=10, padx=10, fill="x")
+            menu_item.pack(pady=10, padx=10, fill="x")
             
-            self.buttons[name] = button
+            self.menu_items[name] = menu_item
     
     def navigate_to(self, page_name: str) -> None:
         """Navigate to specified page"""
-        success = self.controller.show_page(page_name)
-        
-        if success:
-            self.update_active_button(page_name)
+        self.controller.show_page(page_name)
     
-    def update_active_button(self, active_page: str) -> None:
-        """Update button styles to show active page"""
-        for name, button in self.buttons.items():
-            if name == active_page:
-                button.configure(fg_color=("gray75", "gray25"))
-            else:
-                button.configure(fg_color=("gray84", "gray25"))
+    def update_highlighting(self, current_page: str) -> None:
+        """Update menu highlighting for current page"""
+        for page_name, menu_item in self.menu_items.items():
+            menu_item.set_current(page_name == current_page)

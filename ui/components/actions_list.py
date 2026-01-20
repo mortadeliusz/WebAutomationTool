@@ -268,7 +268,7 @@ class ActionsList(ctk.CTkFrame):
             self.field_components[field_name] = component
     
     def save_action(self):
-        """Save the action (new or edited)"""
+        """Save the action (new or edited) and persist to disk"""
         # Collect form data
         action_data = {
             'type': self.action_type_field.get_value(),
@@ -289,7 +289,7 @@ class ActionsList(ctk.CTkFrame):
             # Add new action
             self.actions.append(action_data)
         
-        # Notify parent
+        # Notify parent and trigger save to disk
         self.on_actions_changed(self.actions)
         
         # Reset editing state

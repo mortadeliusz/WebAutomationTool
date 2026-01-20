@@ -12,7 +12,7 @@
       "browser_alias": "main",
       "selector": "//form//textarea",
       "value": "siema elo",
-      "description": "seacrh phrase"
+      "description": "seacrh phrase123"
     },
     {
       "type": "click",
@@ -28,5 +28,5 @@
     }
   ],
   "created_at": "2026-01-14T13:27:11.490279",
-  "modified_at": "2026-01-14T21:27:58.393950"
+  "modified_at": "2026-01-19T11:21:06.746244"
 }
