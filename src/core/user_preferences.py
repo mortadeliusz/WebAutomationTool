@@ -14,8 +14,7 @@ class UserPreferences:
             "theme": "🌙 Dark Mode",
             "lastSelectedTask": None,
             "last_visited_page": "workflow_management",
-            "last_selected_workflow": "",
-            "wizard_mode": True  # New users start with wizard
+            "last_selected_workflow": ""
         }
         self._ensure_config_dir()
     

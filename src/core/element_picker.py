@@ -1,379 +1,520 @@
 """
-Element Picker - Proper implementation with hover highlighting and click capture
+Element Picker - Toggle-based implementation (inject once, reuse)
 """
 
 import re
 from typing import Dict, Tuple, Optional, List
 from playwright.async_api import Page
+from src.utils.debug import is_debug
 
 class ElementPicker:
-    """Stateless element picker with hover highlighting and click capture"""
+    """Toggle-based element picker - inject once, enable/disable as needed"""
+    
+    # Class-level injection tracking
+    _picker_injected_pages = set()
     
     def __init__(self):
-        self.blacklist = []
+        pass
     
-    async def pick_element(self, page: Page, blacklist: List[Dict[str, str]] = None) -> Dict[str, any]:
+    async def pick_element(self, page: Page) -> Dict[str, any]:
         """
-        Enable element picking mode with hover highlighting and click capture
-        Args:
-            page: Playwright page object to operate on
-            blacklist: List of element+attribute combinations to avoid
-        Returns: {'success': bool, 'selector': xpath, 'method': 'xpath', 'error': str}
+        Toggle-based element picker - inject once, then just enable/disable
         """
-        self.blacklist = blacklist or []
         
         try:
-            print("[DEBUG] Starting element picker...")
-            print(f"[DEBUG] Page URL: {page.url}")
-            print(f"[DEBUG] Page is closed: {page.is_closed()}")
+            # 1. INJECT PICKER ONCE (if not already injected for this page)
+            page_id = id(page)
+            if page_id not in ElementPicker._picker_injected_pages:
+                await self._inject_picker(page)
+                ElementPicker._picker_injected_pages.add(page_id)
             
-            # Check if page is responsive
-            title = await page.title()
-            print(f"[DEBUG] Page title: {title}")
-            
-            # Inject hover highlighting script
-            print("[DEBUG] Injecting JavaScript...")
-            await page.add_script_tag(content="""
-                window.elementPickerActive = true;
-                window.lastHighlighted = null;
-                console.log('[PICKER] JavaScript injected successfully');
-                
-                // Create highlight overlay
-                const overlay = document.createElement('div');
-                overlay.id = 'element-picker-overlay';
-                overlay.style.cssText = `
-                    position: absolute;
-                    background: rgba(0, 123, 255, 0.3);
-                    border: 2px solid #007bff;
-                    pointer-events: none;
-                    z-index: 999999;
-                    display: none;
-                `;
-                document.body.appendChild(overlay);
-                console.log('[PICKER] Overlay created');
-                
-                // Hover highlighting
-                document.addEventListener('mouseover', function(e) {
-                    if (!window.elementPickerActive) return;
-                    console.log('[PICKER] Mouse over element:', e.target.tagName);
-                    
-                    const rect = e.target.getBoundingClientRect();
-                    overlay.style.display = 'block';
-                    overlay.style.left = rect.left + window.scrollX + 'px';
-                    overlay.style.top = rect.top + window.scrollY + 'px';
-                    overlay.style.width = rect.width + 'px';
-                    overlay.style.height = rect.height + 'px';
-                    
-                    window.lastHighlighted = e.target;
-                });
-                
-                // Hide overlay when mouse leaves
-                document.addEventListener('mouseout', function(e) {
-                    if (!window.elementPickerActive) return;
-                    overlay.style.display = 'none';
-                });
-                
-                // Capture click and prevent default
-                document.addEventListener('click', function(e) {
-                    if (!window.elementPickerActive) return;
-                    console.log('[PICKER] Element clicked:', e.target.tagName);
-                    
-                    e.preventDefault();
-                    e.stopPropagation();
-                    
-                    // Store clicked element
-                    window.clickedElement = e.target;
-                    window.elementPickerActive = false;
-                    console.log('[PICKER] Element stored, picker deactivated');
-                    
-                    // Clean up
-                    overlay.remove();
-                    
-                    // Dispatch custom event
-                    document.dispatchEvent(new CustomEvent('elementPicked', {
-                        detail: { element: e.target }
-                    }));
-                }, true);
-            """)
-            print("[DEBUG] JavaScript injection completed")
-            
-            # Check if variables are set
-            picker_active = await page.evaluate("window.elementPickerActive")
-            print(f"[DEBUG] elementPickerActive: {picker_active}")
-            
-            # Wait for element to be picked
-            print("[DEBUG] Waiting for user to click an element...")
-            await page.wait_for_function("window.clickedElement", timeout=30000)
-            print("[DEBUG] User clicked element, processing...")
-            
-            # Check if element was actually set
-            has_clicked_element = await page.evaluate("!!window.clickedElement")
-            print(f"[DEBUG] Has clicked element: {has_clicked_element}")
-            
-            # Get the clicked element
-            print("[DEBUG] Getting element handle...")
-            element_handle = await page.evaluate_handle("window.clickedElement")
-            print("[DEBUG] Element handle obtained")
-            
-            # Generate smart XPath for this element
-            print("[DEBUG] Generating XPath...")
-            smart_xpath = await self.generate_smart_xpath_from_handle(element_handle)
-            print(f"[DEBUG] Generated XPath: {smart_xpath}")
-            
-            # Clean up
-            print("[DEBUG] Cleaning up...")
+            # 2. ENABLE PICKER
             await page.evaluate("""
-                // Remove event listeners properly
-                if (window.pickerListeners) {
-                    document.removeEventListener('mouseover', window.pickerListeners.mouseover);
-                    document.removeEventListener('mouseout', window.pickerListeners.mouseout);
-                    document.removeEventListener('click', window.pickerListeners.click, true);
-                    delete window.pickerListeners;
+                console.log('[PICKER] Enabling picker mode');
+                if (window.elementPicker) {
+                    window.elementPicker.enable();
+                } else {
+                    console.error('[PICKER] Picker not found - injection failed');
                 }
-                // Clean up variables
-                delete window.clickedElement;
-                delete window.elementPickerActive;
-                delete window.lastHighlighted;
-                // Remove any leftover overlays
-                const overlay = document.getElementById('element-picker-overlay');
-                if (overlay) overlay.remove();
             """)
-            print("[DEBUG] Element picker completed successfully")
+            
+            # 3. WAIT FOR USER CLICK
+            await page.wait_for_function("window.elementPicker && window.elementPicker.clickedElement", timeout=30000)
+            
+            # 4. GET ELEMENT AND GENERATE SELECTOR
+            element_handle = await page.evaluate_handle("window.elementPicker.clickedElement")
+            result = await self.generate_smart_selector(element_handle, page)
+            
+            # 5. DISABLE PICKER (keep injection for reuse)
+            await page.evaluate("""
+                console.log('[PICKER] Disabling picker mode');
+                if (window.elementPicker) {
+                    window.elementPicker.disable();
+                }
+            """)
             
             return {
                 'success': True,
-                'selector': smart_xpath,
-                'method': 'xpath',
+                'selector': result['selector'],
+                'method': result['method'],
                 'error': None
             }
             
         except Exception as e:
-            print(f"[DEBUG] Exception in element picker: {str(e)}")
-            print(f"[DEBUG] Exception type: {type(e).__name__}")
-            import traceback
-            print(f"[DEBUG] Full traceback: {traceback.format_exc()}")
-            
-            # Clean up on error
+            # Disable picker on error
             try:
-                print("[DEBUG] Attempting cleanup after error...")
-                await page.evaluate("window.elementPickerActive = false; delete window.clickedElement;")
-                print("[DEBUG] Cleanup completed")
-            except Exception as cleanup_error:
-                print(f"[DEBUG] Cleanup failed: {str(cleanup_error)}")
+                await page.evaluate("window.elementPicker && window.elementPicker.disable();")
+            except:
+                pass
             
             return {
                 'success': False,
                 'selector': '',
-                'method': 'xpath',
+                'method': 'css',
                 'error': f"Error in element picking: {str(e)}"
             }
     
-    async def generate_smart_xpath_from_handle(self, element_handle) -> str:
-        """
-        Generate smart XPath with uniqueness verification and recursive context building
-        Returns: xpath
-        """
-        try:
-            print("[DEBUG] Starting XPath generation...")
+    async def _inject_picker(self, page: Page):
+        """Inject picker once - creates reusable picker object"""
+        await page.add_script_tag(content="""
+            console.log('[PICKER] Injecting reusable picker');
             
-            # Get element and ancestor info
-            print("[DEBUG] Evaluating element info...")
-            element_info = await element_handle.evaluate("""
-                el => {
-                    const getElementInfo = (element) => {
-                        const attrs = {};
-                        for (let attr of element.attributes) {
-                            attrs[attr.name] = attr.value;
-                        }
-                        return {
-                            tagName: element.tagName.toLowerCase(),
-                            attributes: attrs,
-                            textContent: element.textContent?.trim() || ''
-                        };
-                    };
+            window.elementPicker = {
+                active: false,
+                clickedElement: null,
+                overlay: null,
+                listeners: {},
+                
+                enable: function() {
+                    console.log('[PICKER] Enabling picker');
+                    this.active = true;
+                    this.clickedElement = null;
                     
-                    // Get element and ancestors
-                    const elements = [];
-                    let current = el;
-                    while (current && current.nodeType === Node.ELEMENT_NODE) {
-                        elements.push(getElementInfo(current));
-                        current = current.parentElement;
-                        if (current?.tagName?.toLowerCase() === 'body') break;
+                    // Create overlay if not exists
+                    if (!this.overlay) {
+                        this.overlay = document.createElement('div');
+                        this.overlay.id = 'element-picker-overlay';
+                        this.overlay.style.cssText = `
+                            position: absolute;
+                            background: rgba(0, 123, 255, 0.3);
+                            border: 2px solid #007bff;
+                            pointer-events: none;
+                            z-index: 999999;
+                            display: none;
+                        `;
+                        document.body.appendChild(this.overlay);
                     }
                     
-                    return elements;
+                    // Define listeners
+                    this.listeners.mouseover = (e) => {
+                        if (!this.active) return;
+                        console.log('[PICKER] Mouseover:', e.target.tagName);
+                        const rect = e.target.getBoundingClientRect();
+                        this.overlay.style.display = 'block';
+                        this.overlay.style.left = rect.left + window.scrollX + 'px';
+                        this.overlay.style.top = rect.top + window.scrollY + 'px';
+                        this.overlay.style.width = rect.width + 'px';
+                        this.overlay.style.height = rect.height + 'px';
+                    };
+                    
+                    this.listeners.mouseout = (e) => {
+                        if (!this.active) return;
+                        this.overlay.style.display = 'none';
+                    };
+                    
+                    this.listeners.click = (e) => {
+                        if (!this.active) return;
+                        console.log('[PICKER] Click captured:', e.target.tagName);
+                        e.preventDefault();
+                        e.stopPropagation();
+                        this.clickedElement = e.target;
+                        this.disable();
+                    };
+                    
+                    // Add listeners
+                    document.addEventListener('mouseover', this.listeners.mouseover);
+                    document.addEventListener('mouseout', this.listeners.mouseout);
+                    document.addEventListener('click', this.listeners.click, true);
+                    
+                    console.log('[PICKER] Picker enabled successfully');
+                },
+                
+                disable: function() {
+                    console.log('[PICKER] Disabling picker');
+                    this.active = false;
+                    
+                    // Hide overlay
+                    if (this.overlay) {
+                        this.overlay.style.display = 'none';
+                    }
+                    
+                    // Remove listeners
+                    if (this.listeners.mouseover) {
+                        document.removeEventListener('mouseover', this.listeners.mouseover);
+                        document.removeEventListener('mouseout', this.listeners.mouseout);
+                        document.removeEventListener('click', this.listeners.click, true);
+                    }
+                    
+                    console.log('[PICKER] Picker disabled successfully');
+                },
+                
+                cleanup: function() {
+                    console.log('[PICKER] Full cleanup');
+                    this.disable();
+                    if (this.overlay) {
+                        this.overlay.remove();
+                        this.overlay = null;
+                    }
+                    this.clickedElement = null;
+                }
+            };
+            
+            console.log('[PICKER] Reusable picker injected successfully');
+        """)
+    
+    async def generate_smart_selector(self, element_handle, page: Page) -> Dict[str, str]:
+        """Generate selector with uniqueness verification"""
+        try:
+            element_info = await element_handle.evaluate("""
+                el => {
+                    const info = {
+                        tag: el.tagName.toLowerCase(),
+                        id: el.id,
+                        name: el.name,
+                        type: el.type,
+                        role: el.getAttribute('role'),
+                        ariaLabel: el.getAttribute('aria-label'),
+                        placeholder: el.placeholder,
+                        text: el.innerText?.trim(),
+                        testId: el.getAttribute('data-testid'),
+                        href: el.href,
+                        alt: el.alt
+                    };
+                    return info;
                 }
             """)
-            print(f"[DEBUG] Element info obtained: {len(element_info) if element_info else 0} elements")
             
-            if not element_info:
-                print("[DEBUG] No element info, returning //body fallback")
-                return "//body"
+            candidates = []
             
-            target_element = element_info[0]
-            ancestors = element_info[1:] if len(element_info) > 1 else []
-            print(f"[DEBUG] Target element: {target_element['tagName']}")
-            print(f"[DEBUG] Ancestors: {len(ancestors)}")
+            # Priority 1: Test ID (most stable)
+            if element_info.get('testId') and not self._is_generated(element_info['testId'], 'testid'):
+                candidates.append(f"[data-testid='{element_info['testId']}']")
             
-            # Build XPath with uniqueness verification
-            print("[DEBUG] Building unique XPath...")
-            xpath = self._build_unique_xpath(target_element, ancestors)
-            print(f"[DEBUG] Built XPath: {xpath}")
+            # Priority 2: ARIA label (accessibility-first)
+            if element_info.get('ariaLabel') and not self._is_generated(element_info['ariaLabel'], 'aria-label'):
+                candidates.append(f"[aria-label='{element_info['ariaLabel']}']")
             
-            return xpath
+            # Priority 3: Alt text (images)
+            if element_info['tag'] == 'img' and element_info.get('alt') and not self._is_generated(element_info['alt'], 'alt'):
+                candidates.append(f"img[alt='{element_info['alt']}']")
             
-        except Exception as e:
-            print(f"[DEBUG] Exception in XPath generation: {str(e)}")
-            print(f"[DEBUG] Exception type: {type(e).__name__}")
-            import traceback
-            print(f"[DEBUG] XPath generation traceback: {traceback.format_exc()}")
-            return "//body"
+            # Priority 4: Stable ID
+            if element_info.get('id') and not self._is_generated(element_info['id'], 'id'):
+                candidates.append(f"#{element_info['id']}")
+            
+            # Priority 5: Name attribute
+            if element_info.get('name') and not self._is_generated(element_info['name'], 'name'):
+                candidates.append(f"[name='{element_info['name']}']")
+            
+            # Priority 6: Href (links, path only)
+            if element_info['tag'] == 'a' and element_info.get('href'):
+                href = element_info['href']
+                # Strip query params and hash
+                href = href.split('?')[0].split('#')[0]
+                # Extract path if full URL
+                if href.startswith('http'):
+                    from urllib.parse import urlparse
+                    href = urlparse(href).path
+                if href and not self._is_generated(href, 'href'):
+                    candidates.append(f"a[href='{href}']")
+            
+            # Priority 7: Placeholder (for inputs)
+            if element_info.get('placeholder') and not self._is_generated(element_info['placeholder'], 'placeholder'):
+                candidates.append(f"[placeholder='{element_info['placeholder']}']")
+            
+            # Priority 8: Role + text (partial match)
+            tag = element_info['tag']
+            if element_info.get('role') and element_info.get('text'):
+                text_escaped = self._escape_xpath_string(element_info['text'])
+                candidates.append(f"//*[@role='{element_info['role']}' and contains(., {text_escaped})]")
+            
+            # Priority 9: Partial text match
+            if element_info.get('text'):
+                if tag in ['button', 'a', 'span', 'label']:
+                    text_escaped = self._escape_xpath_string(element_info['text'])
+                    candidates.append(f"//{tag}[contains(., {text_escaped})]")
+            
+            # Test each candidate for uniqueness
+            for selector in candidates:
+                try:
+                    count = await page.locator(selector).count()
+                    
+                    if count == 1:
+                        return {
+                            'selector': selector,
+                            'method': 'css' if not selector.startswith('//') else 'xpath'
+                        }
+                    
+                    elif count > 1:
+                        # Try adding parent context to make it unique
+                        refined = await self._try_parent_context(selector, element_handle, page)
+                        if refined:
+                            return {
+                                'selector': refined,
+                                'method': 'css' if not refined.startswith('//') else 'xpath'
+                            }
+                    
+                except Exception:
+                    continue
+            
+            # Fallback: position-based XPath
+            xpath = await self._generate_xpath_fallback(element_handle)
+            return {'selector': xpath, 'method': 'xpath'}
+            
+        except Exception:
+            return {'selector': f"//{element_info.get('tag', 'body')}", 'method': 'xpath'}
     
-    def _build_unique_xpath(self, target_element, ancestors) -> str:
-        """Build XPath with uniqueness verification"""
-        tag_name = target_element['tagName']
-        attributes = target_element['attributes']
-        text_content = target_element['textContent']
-        
-        # Get clean attributes (filtered for randomness and blacklist)
-        clean_attrs = self._get_clean_attributes(target_element)
-        
-        # Generate selector candidates in priority order
-        candidates = []
-        
-        # Priority 1: Clean ID
-        if 'id' in clean_attrs:
-            candidates.append(f'//[@id="{clean_attrs["id"]}"]')
-        
-        # Priority 2: Element type + clean name
-        if 'name' in clean_attrs:
-            candidates.append(f'//{tag_name}[@name="{clean_attrs["name"]}"]')
-        
-        # Priority 3: Element type + clean test attributes
-        test_attrs = ['data-testid', 'data-cy', 'data-test', 'data-automation', 'data-qa']
-        for attr in test_attrs:
-            if attr in clean_attrs:
-                candidates.append(f'//{tag_name}[@{attr}="{clean_attrs[attr]}"]')
-        
-        # Priority 4: Element type + stable text content
-        if (text_content and len(text_content) < 50 and 
-            tag_name in ['button', 'a', 'span', 'label'] and
-            not self._is_random(text_content)):
-            candidates.append(f'//{tag_name}[text()="{text_content}"]')
-        
-        # Priority 5: Element type + type attribute
-        if 'type' in attributes:  # Type is usually stable
-            candidates.append(f'//{tag_name}[@type="{attributes["type"]}"]')
-        
-        # Priority 6: Just element type (last resort)
-        candidates.append(f'//{tag_name}')
-        
-        # Try each candidate (in real implementation, would check uniqueness on page)
-        # For now, return first candidate with ancestor context if needed
-        base_selector = candidates[0] if candidates else f'//{tag_name}'
-        
-        # Add ancestor context if base selector might not be unique
-        if len(candidates) > 1 or not ('id' in clean_attrs):
-            return self._add_ancestor_context(base_selector, ancestors)
-        
-        return base_selector
+    # Parent selector builder functions
+    def _build_parent_testid(self, parent: Dict, value: str, as_xpath: bool) -> str:
+        """Build testid parent selector"""
+        if as_xpath:
+            value_esc = self._escape_xpath_string(value)
+            return f"//*[@data-testid={value_esc}]"
+        else:
+            value_esc = self._escape_css_string(value)
+            return f"[data-testid={value_esc}]"
     
-    def _is_blacklisted(self, element_tag: str, attribute: str, value: str) -> bool:
-        """Check if element+attribute combination is blacklisted"""
-        for item in self.blacklist:
-            if (item.get("element") == element_tag and 
-                item.get("attribute") == attribute and 
-                item.get("value") == value):
-                return True
-        return False
+    def _build_parent_id(self, parent: Dict, value: str, as_xpath: bool) -> str:
+        """Build id parent selector"""
+        if as_xpath:
+            value_esc = self._escape_xpath_string(value)
+            return f"//*[@id={value_esc}]"
+        else:
+            value_esc = self._escape_css_string(value)
+            # CSS ID selector: strip quotes from escaped value
+            value_clean = value_esc.strip('"')
+            return f"#{value_clean}"
     
-    def _get_clean_attributes(self, element_info: Dict) -> Dict[str, str]:
-        """Get clean attributes, filtering out blacklisted and random values"""
-        tag_name = element_info['tagName']
-        attributes = element_info['attributes']
-        clean_attrs = {}
+    def _build_parent_aria_label(self, parent: Dict, value: str, as_xpath: bool) -> str:
+        """Build aria-label parent selector"""
+        if as_xpath:
+            value_esc = self._escape_xpath_string(value)
+            return f"//{parent['tag']}[@aria-label={value_esc}]"
+        else:
+            value_esc = self._escape_css_string(value)
+            return f"{parent['tag']}[aria-label={value_esc}]"
+    
+    def _build_parent_name(self, parent: Dict, value: str, as_xpath: bool) -> str:
+        """Build name parent selector"""
+        if as_xpath:
+            value_esc = self._escape_xpath_string(value)
+            return f"//{parent['tag']}[@name={value_esc}]"
+        else:
+            value_esc = self._escape_css_string(value)
+            return f"{parent['tag']}[name={value_esc}]"
+    
+    def _build_parent_tag(self, parent: Dict, value: str, as_xpath: bool) -> str:
+        """Build tag-only parent selector (fallback)"""
+        return f"//{parent['tag']}" if as_xpath else parent['tag']
+    
+    # Parent selector registry: (attr_key, attr_name, builder_function)
+    _PARENT_SELECTOR_REGISTRY = [
+        ('testId', 'data-testid', _build_parent_testid),
+        ('id', 'id', _build_parent_id),
+        ('ariaLabel', 'aria-label', _build_parent_aria_label),
+        ('name', 'name', _build_parent_name),
+        ('tag', 'tag', _build_parent_tag),
+    ]
+    
+    def _build_parent_selectors(self, parent: Dict, as_xpath: bool) -> List[str]:
+        """
+        Build parent selectors using registry pattern.
         
-        for attr_name, attr_value in attributes.items():
-            # Skip if blacklisted
-            if self._is_blacklisted(tag_name, attr_name, attr_value):
+        To add new attribute:
+        1. Define builder function (copy existing pattern)
+        2. Add to _PARENT_SELECTOR_REGISTRY
+        """
+        selectors = []
+        
+        for attr_key, attr_name, builder_fn in self._PARENT_SELECTOR_REGISTRY:
+            # Tag is always added as fallback
+            if attr_key == 'tag':
+                selectors.append(builder_fn(self, parent, None, as_xpath))
                 continue
             
-            # Skip if random
-            if self._is_random(attr_value):
+            # Check attribute exists and not generated
+            value = parent.get(attr_key)
+            if not value or self._is_generated(value, attr_name):
                 continue
             
-            clean_attrs[attr_name] = attr_value
+            # Build selector using registered function
+            selector = builder_fn(self, parent, value, as_xpath)
+            selectors.append(selector)
         
-        return clean_attrs
+        return selectors
     
-    def _is_random(self, value: str) -> bool:
-        """Check if any attribute value looks auto-generated"""
-        if not value or len(value) < 2 or len(value) > 30:
-            return True
+    async def _try_parent_context(self, base_selector, element_handle, page: Page) -> Optional[str]:
+        """Try adding parent context to make selector unique"""
+        try:
+            # Get parent chain up to body/html
+            parents = await element_handle.evaluate("""
+                el => {
+                    const parents = [];
+                    let current = el.parentElement;
+                    let iterations = 0;
+                    
+                    while (current && iterations < 100) {
+                        // Stop at document root
+                        if (current.tagName === 'BODY' || current.tagName === 'HTML') {
+                            break;
+                        }
+                        
+                        parents.push({
+                            tag: current.tagName.toLowerCase(),
+                            id: current.id,
+                            testId: current.getAttribute('data-testid'),
+                            ariaLabel: current.getAttribute('aria-label'),
+                            name: current.name
+                        });
+                        
+                        current = current.parentElement;
+                        iterations++;
+                    }
+                    
+                    return parents;
+                }
+            """)
+            
+            if len(parents) == 0:
+                return None
+            
+            # Determine if base selector is XPath
+            is_xpath = base_selector.startswith('//')
+            
+            # Try each parent level (closest to furthest)
+            for parent in parents:
+                # Build parent selectors in priority order
+                parent_selectors = self._build_parent_selectors(parent, is_xpath)
+                
+                # Test each parent selector
+                for parent_sel in parent_selectors:
+                    # Combine parent + base selector
+                    if is_xpath:
+                        selector = f"{parent_sel}{base_selector}"  # XPath: no space
+                    else:
+                        selector = f"{parent_sel} {base_selector}"  # CSS: space separator
+                    
+                    try:
+                        count = await page.locator(selector).count()
+                        if count == 1:
+                            return selector
+                    except Exception as e:
+                        if is_debug():
+                            print(f"[DEBUG] Parent selector failed: '{selector}' - {type(e).__name__}: {e}")
+                        continue
+            
+            return None
+            
+        except Exception:
+            return None
+    
+    async def _generate_xpath_fallback(self, element_handle) -> str:
+        """Generate position-based XPath as fallback"""
+        return await element_handle.evaluate("""
+            el => {
+                const getPath = (element) => {
+                    if (element.id && !/^[0-9]/.test(element.id))
+                        return `//*[@id="${element.id}"]`;
+                    
+                    const parts = [];
+                    while (element && element.nodeType === Node.ELEMENT_NODE) {
+                        let index = 1;
+                        let sibling = element.previousSibling;
+                        while (sibling) {
+                            if (sibling.nodeType === Node.ELEMENT_NODE && 
+                                sibling.tagName === element.tagName) index++;
+                            sibling = sibling.previousSibling;
+                        }
+                        
+                        const tagName = element.tagName.toLowerCase();
+                        const part = index > 1 ? `${tagName}[${index}]` : tagName;
+                        parts.unshift(part);
+                        
+                        element = element.parentElement;
+                        if (element?.tagName === 'BODY') break;
+                    }
+                    return '//' + parts.join('/');
+                };
+                return getPath(el);
+            }
+        """)
+    
+    def _escape_xpath_string(self, text: str) -> str:
+        """Escape quotes in XPath strings"""
+        if not text:
+            return '""'
         
-        # Semantic patterns - only accept these
+        # No quotes - use double quotes
+        if '"' not in text and "'" not in text:
+            return f'"{text}"'
+        
+        # Only double quotes - use single quotes
+        if '"' in text and "'" not in text:
+            return f"'{text}'"
+        
+        # Only single quotes - use double quotes
+        if "'" in text and '"' not in text:
+            return f'"{text}"'
+        
+        # Both quotes - use concat
+        parts = []
+        current = []
+        for char in text:
+            if char == '"':
+                if current:
+                    parts.append(f'"{{"".join(current)}}"')
+                    current = []
+                parts.append("'\"'")
+            else:
+                current.append(char)
+        if current:
+            parts.append(f'"{{"".join(current)}}"')
+        
+        return f"concat({', '.join(parts)})"
+    
+    def _escape_css_string(self, text: str) -> str:
+        """Escape quotes in CSS attribute selectors"""
+        if not text:
+            return '""'
+        # Escape backslashes and quotes
+        text = text.replace('\\', '\\\\').replace('"', '\\"')
+        return f'"{text}"'
+    
+    def _is_generated(self, value: str, context: str = 'generic') -> bool:
+        """
+        Check if attribute value looks dynamically generated.
+        
+        Args:
+            value: The attribute value to check (assumed non-empty)
+            context: Type of attribute being checked
+        
+        Returns:
+            True if value appears to be auto-generated, False otherwise
+        """
+        # Pass-through contexts (never consider generated)
+        if context in ['href', 'text', 'aria-label', 'alt', 'placeholder']:
+            return False
+        
+        # For id, name, testid, and generic: check against code identifier patterns
         SEMANTIC_PATTERNS = [
-            r'^[a-z]+$',                           # Simple: header, modal
-            r'^[a-z]+-[a-z]+(-[a-z]+)*$',         # kebab-case: login-form
-            r'^[a-z]+[A-Z][a-z]*([A-Z][a-z]*)*$', # camelCase: loginForm
-            r'^[a-z]+_[a-z]+(_[a-z]+)*$',         # snake_case: login_form
-            r'^[A-Z][a-z]+([A-Z][a-z]*)*$',       # PascalCase: LoginForm
+            r'^[a-z]+$',                              # lowercase: "header"
+            r'^[A-Z]+$',                              # UPPERCASE: "OK"
+            r'^[a-z]+-[a-z]+(-[a-z]+)*$',            # kebab-case: "user-profile"
+            r'^[a-z]+[A-Z][a-z]*([A-Z][a-z]*)*$',    # camelCase: "userName"
+            r'^[a-z]+_[a-z]+(_[a-z]+)*$',            # snake_case: "user_name"
+            r'^[A-Z][a-z]+([A-Z][a-z]*)*$',          # PascalCase: "UserName"
+            r'^\d+$',                                 # Numbers: "1", "123"
         ]
         
         return not any(re.match(pattern + '$', value) for pattern in SEMANTIC_PATTERNS)
     
-    def _add_ancestor_context(self, base_selector, ancestors):
-        """Add ancestor context to improve specificity"""
-        if not ancestors:
-            return base_selector
-        
-        # Try to find meaningful ancestor context
-        for ancestor in ancestors:
-            ancestor_context = self._get_clean_ancestor_selector(ancestor)
-            if ancestor_context:
-                return f"{ancestor_context}{base_selector}"
-        
-        return base_selector
-    
-    def _get_clean_ancestor_selector(self, ancestor_info):
-        """Get clean selector for ancestor element"""
-        tag_name = ancestor_info['tagName']
-        
-        # Get clean attributes for ancestor
-        clean_attrs = self._get_clean_attributes(ancestor_info)
-        
-        # Semantic containers
-        if tag_name in ['form', 'nav', 'main', 'section', 'article', 'header', 'footer']:
-            return f"//{tag_name}"
-        
-        # Clean ID
-        if 'id' in clean_attrs:
-            return f'//[@id="{clean_attrs["id"]}"]'
-        
-        # Stable class
-        if 'class' in clean_attrs:
-            classes = clean_attrs['class'].split()
-            # Find first non-blacklisted, non-random class
-            for cls in classes:
-                if not self._is_blacklisted(tag_name, 'class', cls) and not self._is_random(cls):
-                    return f'//{tag_name}[contains(@class, "{cls}")]'
-        
-        return None  # Skip this ancestor
-    
-    def get_reliability_description(self, reliability: str) -> str:
-        """Get human-readable description of reliability level"""
-        descriptions = {
-            'high': 'High reliability - Uses testing or semantic attributes',
-            'medium': 'Medium reliability - Uses clean IDs or text content',
-            'low': 'Low reliability - Position-based selector (may break if page changes)'
-        }
-        return descriptions.get(reliability, 'Unknown reliability')
-    
-    def get_reliability_color(self, reliability: str) -> str:
-        """Get color indicator for reliability level"""
-        colors = {
-            'high': '🟢',
-            'medium': '🟡', 
-            'low': '🔴'
-        }
-        return colors.get(reliability, '⚪')

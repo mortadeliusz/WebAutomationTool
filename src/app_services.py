@@ -11,6 +11,7 @@ from src.core.browser_controller import BrowserController
 
 # Global service instances
 _browser_controller: Optional[BrowserController] = None
+_browser_state_observer = None
 
 def initialize_services():
     """Initialize all application services - called once by App on startup"""
@@ -30,6 +31,14 @@ def get_browser_controller() -> BrowserController:
     if not _browser_controller:
         raise RuntimeError("Services not initialized - call initialize_services() first")
     return _browser_controller
+
+def get_browser_state_observer():
+    """Get singleton browser state observer"""
+    global _browser_state_observer
+    if _browser_state_observer is None:
+        from src.services.browser_state_observer import BrowserStateObserver
+        _browser_state_observer = BrowserStateObserver()
+    return _browser_state_observer
 
 async def cleanup_services():
     """Cleanup all services - called by App on shutdown"""

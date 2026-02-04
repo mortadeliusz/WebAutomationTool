@@ -177,6 +177,24 @@ def _validate_workflow(workflow: Dict) -> bool:
         return False
 
 
+def validate_workflow(workflow: dict) -> tuple[bool, str]:
+    """Validate workflow structure for execution"""
+    # Check browsers exist
+    if 'browsers' not in workflow or not workflow['browsers']:
+        return False, "Workflow must have at least one browser"
+    
+    # Check actions have valid browser_alias
+    browser_aliases = set(workflow['browsers'].keys())
+    for i, action in enumerate(workflow.get('actions', [])):
+        alias = action.get('browser_alias')
+        if not alias:
+            return False, f"Action {i+1} missing browser_alias"
+        if alias not in browser_aliases:
+            return False, f"Action {i+1} references non-existent browser '{alias}'"
+    
+    return True, None
+
+
 def _generate_filename(workflow_name: str) -> str:
     """Generate safe filename from workflow name"""
     # Remove invalid characters and replace spaces with underscores

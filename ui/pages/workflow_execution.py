@@ -119,11 +119,11 @@ class WorkflowExecutionPage(ctk.CTkFrame):
     
     def select_data_file(self):
         """Open file dialog and load selected data file"""
+        supported_exts = " ".join(f"*{ext}" for ext in DataLoader.SUPPORTED_EXTENSIONS)
         file_path = filedialog.askopenfilename(
             title="Select Data File",
             filetypes=[
-                ("CSV files", "*.csv"),
-                ("Excel files", "*.xlsx *.xls"),
+                ("Supported files", supported_exts),
                 ("All files", "*.*")
             ]
         )

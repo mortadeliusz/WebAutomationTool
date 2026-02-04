@@ -5,6 +5,7 @@ Page Registry - Central configuration for all application pages
 from ui.pages.workflow_execution import WorkflowExecutionPage
 from ui.pages.workflow_management import WorkflowManagementPage
 from ui.pages.subscription import SubscriptionPage
+from ui.pages.accordion_test import AccordionTestPage
 
 # Central page configuration
 PAGES = [
@@ -22,6 +23,11 @@ PAGES = [
         "name": "subscription",
         "class": SubscriptionPage,
         "menu_text": "Subscription"
+    },
+    {
+        "name": "accordion_test",
+        "class": AccordionTestPage,
+        "menu_text": "Accordion Test"
     }
 ]
 

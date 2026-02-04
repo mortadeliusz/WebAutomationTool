@@ -39,36 +39,6 @@ def set_last_selected_workflow(workflow_name: str) -> bool:
     except Exception:
         return False
 
-def get_wizard_mode_preference() -> bool:
-    """Get wizard mode preference with fallback to True (new users start with wizard)"""
-    try:
-        return get_user_preference("wizard_mode", True)
-    except Exception:
-        return True  # Default to wizard for new users
-
-def set_wizard_mode_preference(enabled: bool) -> bool:
-    """Set wizard mode preference with immediate persistence"""
-    try:
-        set_user_preference("wizard_mode", enabled)
-        return True
-    except Exception:
-        return False  # Graceful degradation
-
-def get_wizard_mode() -> bool:
-    """Get wizard mode preference with fallback to True"""
-    try:
-        return get_user_preference("wizard_mode", True)
-    except Exception:
-        return True
-
-def set_wizard_mode(enabled: bool) -> bool:
-    """Set wizard mode preference with immediate persistence"""
-    try:
-        set_user_preference("wizard_mode", enabled)
-        return True
-    except Exception:
-        return False
-
 def get_session_state(key: str, default=None):
     """Get session-level state (high-frequency updates)"""
     return _session_state.get(key, default)
