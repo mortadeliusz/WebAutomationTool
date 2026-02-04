@@ -1,5 +1,91 @@
 # Testing Checklist - Enhanced Navigation & State Management
 
+## Browser Configuration Testing
+
+### **Browser Instance Component**
+- [ ] Browser type ComboBox displays installed browsers first
+- [ ] Browser type ComboBox shows "(not installed)" for unavailable browsers
+- [ ] Starting URL entry accepts valid URLs
+- [ ] Starting URL entry handles protocol-less URLs (google.com)
+- [ ] Save button always enabled
+- [ ] Save button validates configuration
+- [ ] Save button persists changes to disk
+- [ ] Launch button launches browser with starting URL
+- [ ] Close button closes running browser
+- [ ] Status indicator shows correct state (⚪/🟢/🔴)
+- [ ] Status indicator updates on browser state changes
+
+### **Single Browser Mode**
+- [ ] Alias label hidden in single browser mode
+- [ ] Rename button hidden in single browser mode
+- [ ] Delete button hidden in single browser mode
+- [ ] Save button works correctly
+- [ ] Launch/Close buttons work correctly
+
+### **Multi-Browser Mode**
+- [ ] Alias label visible for each browser
+- [ ] Rename button visible for each browser
+- [ ] Delete button visible for each browser
+- [ ] Each browser instance independent
+- [ ] Browser instances don't interfere with each other
+
+### **Rename Browser**
+- [ ] Rename button opens dialog
+- [ ] Dialog pre-filled with current alias
+- [ ] Empty alias rejected with error message
+- [ ] Duplicate alias rejected with error message
+- [ ] Valid rename updates workflow
+- [ ] Rename cascades to all actions using that browser
+- [ ] Rename persists to disk (save-first pattern)
+- [ ] Rename updates runtime browser controller
+- [ ] Rename updates UI in-place (no full refresh)
+- [ ] Save failure rolls back rename
+- [ ] Enter key submits rename
+- [ ] Escape key cancels rename
+
+### **Delete Browser**
+- [ ] Delete button shows confirmation dialog
+- [ ] Confirmation shows affected action count
+- [ ] Delete last browser blocked with error message
+- [ ] Delete removes browser from workflow
+- [ ] Delete removes all actions using that browser
+- [ ] Delete persists to disk (save-first pattern)
+- [ ] Delete closes running browser
+- [ ] Delete refreshes UI
+- [ ] Save failure rolls back delete
+- [ ] Cancel preserves browser
+
+### **Browser Validation**
+- [ ] Empty browser type rejected
+- [ ] Invalid browser type rejected
+- [ ] Empty alias rejected (rename)
+- [ ] Duplicate alias rejected (rename)
+- [ ] Validation errors show clear messages
+- [ ] Validation prevents save on error
+
+### **Browser State Observer Integration**
+- [ ] Status indicator subscribes to browser state
+- [ ] Status updates on browser launch
+- [ ] Status updates on browser close
+- [ ] Status updates on manual browser close
+- [ ] Component unsubscribes on destroy
+- [ ] No memory leaks from observer subscriptions
+
+### **Save-First Pattern**
+- [ ] Rename saves workflow before updating runtime
+- [ ] Delete saves workflow before closing browser
+- [ ] Save failure prevents runtime updates
+- [ ] Rollback restores original state on save failure
+- [ ] User sees clear error on save failure
+
+### **Browser Detection**
+- [ ] Installed browsers detected correctly
+- [ ] Browser display mapping cached per session
+- [ ] Uninstalled browsers shown with "(not installed)"
+- [ ] Installed browsers sorted first in dropdown
+- [ ] Warning shown when selecting uninstalled browser
+- [ ] Runtime validation catches uninstalled browser launch
+
 ## Navigation & State Management
 
 ### **Smart Default Page Routing**

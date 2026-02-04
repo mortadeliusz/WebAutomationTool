@@ -71,11 +71,21 @@ class WorkflowSinglePageEditor(ctk.CTkFrame):
         self.name_entry.pack(fill="x", pady=(0, 20))
         
         # Browser configuration
-        self.browser_config = BrowserConfigSection(content)
+        self.browser_config = BrowserConfigSection(
+            content,
+            get_workflow=lambda: self.current_workflow,
+            on_workflow_changed=self.on_workflow_changed
+        )
         self.browser_config.pack(fill="x", pady=(0, 20))
         
         # Actions section
-        self.actions_list = ActionsList(content, self.on_actions_changed, on_load_data=self.load_data_sample)
+        self.actions_list = ActionsList(
+            content,
+            self.on_actions_changed,
+            get_workflow=lambda: self.current_workflow,
+            on_load_data=self.load_data_sample,
+            on_get_starting_url=self.get_starting_url
+        )
         self.actions_list.pack(fill="both", expand=True, pady=(0, 20))
         
         # Save button
@@ -102,9 +112,8 @@ class WorkflowSinglePageEditor(ctk.CTkFrame):
             self.name_entry.delete(0, "end")
             self.name_entry.insert(0, self.current_workflow.get('name', ''))
             
-            # Load browser config
-            browser_config = self.current_workflow.get('browsers', {}).get('main', {})
-            self.browser_config.set_config(browser_config)
+            # Refresh browser config (will create instances from workflow)
+            self.browser_config.refresh_instances()
             
             # Load actions
             actions = self.current_workflow.get('actions', [])
@@ -117,12 +126,29 @@ class WorkflowSinglePageEditor(ctk.CTkFrame):
         
         # Update workflow data
         self.current_workflow['name'] = self.name_entry.get() or "Unnamed Workflow"
-        self.current_workflow['browsers']['main'] = self.browser_config.get_config()
+        self.current_workflow['browsers'] = self.browser_config.get_config()
+        
+        # Validate workflow
+        from src.utils.workflow_files import validate_workflow
+        from tkinter import messagebox
+        valid, error = validate_workflow(self.current_workflow)
+        if not valid:
+            messagebox.showerror("Invalid Workflow", error)
+            return
         
         if save_workflow(self.current_workflow):
             from src.app_services import clear_workflow_data_sample
             clear_workflow_data_sample()
             self.on_save()
+    
+    def on_workflow_changed(self):
+        """Called when workflow structure changes"""
+        # Refresh browser instances
+        self.browser_config.refresh_instances()
+        
+        # Notify actions list of changes
+        if hasattr(self.actions_list, 'on_workflow_changed'):
+            self.actions_list.on_workflow_changed()
     
     def on_actions_changed(self, actions: List[Dict]):
         """Handle actions list changes and save to disk"""
@@ -159,3 +185,9 @@ class WorkflowSinglePageEditor(ctk.CTkFrame):
         """Called when data sample changes"""
         self.data_status.refresh()
         self.actions_list.refresh_all_helpers()
+    
+    def get_starting_url(self) -> str:
+        """Get workflow's configured starting URL"""
+        if not self.current_workflow:
+            return "about:blank"
+        return self.current_workflow.get('browsers', {}).get('main', {}).get('starting_url') or "about:blank"

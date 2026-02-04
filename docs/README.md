@@ -67,17 +67,18 @@
 
 ---
 
-## **🔧 Specialized Topics**
+## **🔧 Implementation Details**
 
-### **[DATATABLE_IMPLEMENTATION.md](./DATATABLE_IMPLEMENTATION.md)** - DataTable Component
-**Who:** Developers working on data display  
-**Purpose:** Specific implementation details for DataTable wrapper pattern  
-**Content:** TTK styling, theme integration, component architecture  
+### **`implementations/` folder** - Tactical Documentation
+**Who:** Developers working on specific features  
+**Purpose:** Code-level implementation guides for specific features  
+**Content:** Technical deep-dives, implementation patterns, design decisions
 
-### **[DOMAIN_SPECIFIC_FIELDS.md](./DOMAIN_SPECIFIC_FIELDS.md)** - Field Components
-**Who:** UI developers  
-**Purpose:** Domain-specific field component architecture  
-**Content:** Component design, data expression helpers, callback patterns  
+**Current implementations:**
+- `element_picker_parent_selector.md` - Parent selector enhancement with registry pattern
+- `datatable_wrapper_pattern.md` - DataTable component architecture
+- `browser_state_observer.md` - Reactive browser state management
+- `domain_specific_fields.md` - Domain-specific field components  
 
 ---
 
@@ -113,9 +114,9 @@
 
 ### **Update Frequency:**
 - **IMPLEMENTATION_STATUS.md** - Weekly during active development
-- **DEVELOPMENT_PROGRESS.md** - After major milestones
 - **TECHNICAL_REFERENCE.md** - When architecture changes
 - **MODUS_OPERANDI.md** - Rarely (foundational principles)
+- **implementations/** - When features are implemented/updated
 
 ### **Ownership:**
 - **Business Documents** - Product Manager

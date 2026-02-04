@@ -15,15 +15,23 @@ from ui.components.fields.selector_picker import SelectorPickerField
 
 
 class ActionsList(ctk.CTkFrame):
-    def __init__(self, parent, on_actions_changed: Callable[[List[Dict]], None], on_load_data: Callable = None):
+    def __init__(self, parent, on_actions_changed: Callable[[List[Dict]], None], get_workflow: Callable, on_load_data: Callable = None, on_get_starting_url: Callable = None):
         super().__init__(parent)
         self.on_actions_changed = on_actions_changed
+        self.get_workflow = get_workflow
         self.on_load_data = on_load_data
-        self.actions: List[Dict] = []
+        self.on_get_starting_url = on_get_starting_url
         self.editing_action = False
         self.editing_index: Optional[int] = None  # None = new action, int = editing existing
         self.field_components = {}
+        self.browser_selector = None
         self.setup_ui()
+    
+    @property
+    def actions(self) -> List[Dict]:
+        """Get actions from workflow (single source of truth)"""
+        workflow = self.get_workflow()
+        return workflow.get('actions', []) if workflow else []
     
     def setup_ui(self):
         """Setup the actions list UI"""
@@ -39,9 +47,34 @@ class ActionsList(ctk.CTkFrame):
         self.add_button = ctk.CTkButton(self, text="Add Action", command=self.start_add_action)
         self.add_button.pack(padx=10, pady=(0, 10))
     
+    def get_browsers(self):
+        """Get browsers from workflow"""
+        workflow = self.get_workflow()
+        return workflow.get('browsers', {}) if workflow else {}
+    
+    def on_workflow_changed(self):
+        """React to workflow changes (browser rename/delete)"""
+        # Property reads fresh data automatically - no sync needed
+        
+        # Refresh browser dropdown if editor is open
+        if self.editing_action and self.browser_selector:
+            browsers = self.get_browsers()
+            current_value = self.browser_selector.get()
+            self.browser_selector.configure(values=[""] + list(browsers.keys()))
+            # Restore selection if still valid
+            if current_value in browsers:
+                self.browser_selector.set(current_value)
+            else:
+                self.browser_selector.set("")
+        
+        # Refresh display (closes open editor - acceptable limitation)
+        self.refresh_display()
+    
     def set_actions(self, actions: List[Dict]):
-        """Set the actions list"""
-        self.actions = actions.copy()
+        """Set actions in workflow (for initial load)"""
+        workflow = self.get_workflow()
+        if workflow:
+            workflow['actions'] = actions.copy()
         self.refresh_display()
     
     def refresh_display(self):
@@ -131,9 +164,10 @@ class ActionsList(ctk.CTkFrame):
     
     def delete_action(self, index: int):
         """Delete an action"""
-        if 0 <= index < len(self.actions):
-            self.actions.pop(index)
-            self.on_actions_changed(self.actions)
+        workflow = self.get_workflow()
+        if workflow and 0 <= index < len(workflow['actions']):
+            workflow['actions'].pop(index)
+            self.on_actions_changed(workflow['actions'])
             self.refresh_display()
     
     def create_inline_editor_at(self, index: Optional[int]):
@@ -187,8 +221,9 @@ class ActionsList(ctk.CTkFrame):
             spacer.pack(side="right")
         
         # Load existing action data if editing
-        if index is not None and 0 <= index < len(self.actions):
-            existing_action = self.actions[index]
+        workflow = self.get_workflow()
+        if index is not None and workflow and 0 <= index < len(workflow['actions']):
+            existing_action = workflow['actions'][index]
             action_type = existing_action.get('type', '')
             if action_type:
                 self.action_type_field.set_value(action_type)
@@ -214,6 +249,33 @@ class ActionsList(ctk.CTkFrame):
         for widget in self.fields_container.winfo_children():
             widget.destroy()
         self.field_components.clear()
+        self.browser_selector = None
+        
+        # Browser selector (if multiple browsers)
+        browsers = self.get_browsers()
+        if len(browsers) > 1:
+            browser_frame = ctk.CTkFrame(self.fields_container)
+            browser_frame.pack(fill="x", padx=5, pady=5)
+            
+            ctk.CTkLabel(browser_frame, text="Browser:").pack(side="left", padx=(5, 10))
+            self.browser_selector = ctk.CTkComboBox(
+                browser_frame,
+                values=[""] + list(browsers.keys()),
+                state="readonly",
+                width=200
+            )
+            self.browser_selector.pack(side="left", padx=5)
+            
+            # Set default
+            workflow = self.get_workflow()
+            if self.editing_index is not None and workflow and 0 <= self.editing_index < len(workflow['actions']):
+                current_alias = workflow['actions'][self.editing_index].get('browser_alias')
+                if current_alias and current_alias in browsers:
+                    self.browser_selector.set(current_alias)
+                else:
+                    self.browser_selector.set("")
+            else:
+                self.browser_selector.set("")  # Blank for new actions
         
         # Get required and optional fields
         required_fields = get_required_fields(action_type)
@@ -276,10 +338,28 @@ class ActionsList(ctk.CTkFrame):
     
     def save_action(self):
         """Save the action (new or edited) and persist to disk"""
+        workflow = self.get_workflow()
+        if not workflow:
+            return
+        
+        # Get browser alias
+        browsers = self.get_browsers()
+        if len(browsers) == 1:
+            browser_alias = list(browsers.keys())[0]
+        else:
+            if not self.browser_selector:
+                browser_alias = 'main'
+            else:
+                browser_alias = self.browser_selector.get()
+                if not browser_alias:
+                    from tkinter import messagebox
+                    messagebox.showerror("Missing Browser", "Please select a browser for this action.")
+                    return
+        
         # Collect form data
         action_data = {
             'type': self.action_type_field.get_value(),
-            'browser_alias': 'main'  # Default to 'main' for single browser
+            'browser_alias': browser_alias
         }
         
         # Get values from field components
@@ -289,15 +369,15 @@ class ActionsList(ctk.CTkFrame):
                 action_data[field_name] = value
         
         # Update existing or add new
-        if self.editing_index is not None and 0 <= self.editing_index < len(self.actions):
+        if self.editing_index is not None and 0 <= self.editing_index < len(workflow['actions']):
             # Update existing action
-            self.actions[self.editing_index] = action_data
+            workflow['actions'][self.editing_index] = action_data
         else:
             # Add new action
-            self.actions.append(action_data)
+            workflow['actions'].append(action_data)
         
         # Notify parent and trigger save to disk
-        self.on_actions_changed(self.actions)
+        self.on_actions_changed(workflow['actions'])
         
         # Reset editing state
         self.editing_action = False
@@ -325,9 +405,42 @@ class ActionsList(ctk.CTkFrame):
             from src.app_services import get_browser_controller
             from src.core.element_picker import ElementPicker
             from ui.components.action_overlay import ActionOverlay
+            from tkinter import messagebox
+            
+            # Get browser alias from current action
+            if self.editing_index is not None and 0 <= self.editing_index < len(self.actions):
+                browser_alias = self.actions[self.editing_index].get('browser_alias')
+            else:
+                # New action - get from selector or default
+                browsers = self.get_browsers()
+                if len(browsers) == 1:
+                    browser_alias = list(browsers.keys())[0]
+                elif self.browser_selector:
+                    browser_alias = self.browser_selector.get()
+                else:
+                    browser_alias = None
+            
+            if not browser_alias:
+                messagebox.showerror("No Browser Selected", "Please select a browser for this action first.")
+                return
+            
+            # Get browser config
+            browsers = self.get_browsers()
+            if browser_alias not in browsers:
+                messagebox.showerror("Browser Not Found", f"Browser '{browser_alias}' does not exist in workflow.")
+                return
+            
+            browser_config = browsers[browser_alias]
+            browser_type = browser_config.get('browser_type', 'chrome')
+            starting_url = browser_config.get('starting_url', 'about:blank')
             
             browser_controller = get_browser_controller()
-            page = await browser_controller.get_page("chrome", "main", "https://www.google.com", force_navigate=False)
+            page = await browser_controller.get_page(
+                browser_type,
+                browser_alias,
+                starting_url,
+                force_navigate=False  # Use as-is
+            )
             
             if not page:
                 print("No active page for element picker")

@@ -5,6 +5,7 @@ Element Picker - Toggle-based implementation (inject once, reuse)
 import re
 from typing import Dict, Tuple, Optional, List
 from playwright.async_api import Page
+from src.utils.debug import is_debug
 
 class ElementPicker:
     """Toggle-based element picker - inject once, enable/disable as needed"""
@@ -13,13 +14,12 @@ class ElementPicker:
     _picker_injected_pages = set()
     
     def __init__(self):
-        self.blacklist = []
+        pass
     
-    async def pick_element(self, page: Page, blacklist: List[Dict[str, str]] = None) -> Dict[str, any]:
+    async def pick_element(self, page: Page) -> Dict[str, any]:
         """
         Toggle-based element picker - inject once, then just enable/disable
         """
-        self.blacklist = blacklist or []
         
         try:
             # 1. INJECT PICKER ONCE (if not already injected for this page)
@@ -41,9 +41,9 @@ class ElementPicker:
             # 3. WAIT FOR USER CLICK
             await page.wait_for_function("window.elementPicker && window.elementPicker.clickedElement", timeout=30000)
             
-            # 4. GET ELEMENT AND GENERATE XPATH
+            # 4. GET ELEMENT AND GENERATE SELECTOR
             element_handle = await page.evaluate_handle("window.elementPicker.clickedElement")
-            smart_xpath = await self.generate_smart_xpath_from_handle(element_handle)
+            result = await self.generate_smart_selector(element_handle, page)
             
             # 5. DISABLE PICKER (keep injection for reuse)
             await page.evaluate("""
@@ -55,8 +55,8 @@ class ElementPicker:
             
             return {
                 'success': True,
-                'selector': smart_xpath,
-                'method': 'xpath',
+                'selector': result['selector'],
+                'method': result['method'],
                 'error': None
             }
             
@@ -70,7 +70,7 @@ class ElementPicker:
             return {
                 'success': False,
                 'selector': '',
-                'method': 'xpath',
+                'method': 'css',
                 'error': f"Error in element picking: {str(e)}"
             }
     
@@ -172,155 +172,349 @@ class ElementPicker:
             console.log('[PICKER] Reusable picker injected successfully');
         """)
     
-    async def generate_smart_xpath_from_handle(self, element_handle) -> str:
-        """Generate smart XPath from element handle"""
+    async def generate_smart_selector(self, element_handle, page: Page) -> Dict[str, str]:
+        """Generate selector with uniqueness verification"""
         try:
             element_info = await element_handle.evaluate("""
                 el => {
-                    const getElementInfo = (element) => {
-                        const attrs = {};
-                        for (let attr of element.attributes) {
-                            attrs[attr.name] = attr.value;
-                        }
-                        return {
-                            tagName: element.tagName.toLowerCase(),
-                            attributes: attrs,
-                            textContent: element.textContent?.trim() || ''
-                        };
+                    const info = {
+                        tag: el.tagName.toLowerCase(),
+                        id: el.id,
+                        name: el.name,
+                        type: el.type,
+                        role: el.getAttribute('role'),
+                        ariaLabel: el.getAttribute('aria-label'),
+                        placeholder: el.placeholder,
+                        text: el.innerText?.trim(),
+                        testId: el.getAttribute('data-testid'),
+                        href: el.href,
+                        alt: el.alt
                     };
-                    
-                    const elements = [];
-                    let current = el;
-                    while (current && current.nodeType === Node.ELEMENT_NODE) {
-                        elements.push(getElementInfo(current));
-                        current = current.parentElement;
-                        if (current?.tagName?.toLowerCase() === 'body') break;
-                    }
-                    
-                    return elements;
+                    return info;
                 }
             """)
             
-            if not element_info:
-                return "//body"
+            candidates = []
             
-            target_element = element_info[0]
-            ancestors = element_info[1:] if len(element_info) > 1 else []
+            # Priority 1: Test ID (most stable)
+            if element_info.get('testId') and not self._is_generated(element_info['testId'], 'testid'):
+                candidates.append(f"[data-testid='{element_info['testId']}']")
             
-            return self._build_unique_xpath(target_element, ancestors)
+            # Priority 2: ARIA label (accessibility-first)
+            if element_info.get('ariaLabel') and not self._is_generated(element_info['ariaLabel'], 'aria-label'):
+                candidates.append(f"[aria-label='{element_info['ariaLabel']}']")
             
-        except Exception as e:
-            return "//body"
+            # Priority 3: Alt text (images)
+            if element_info['tag'] == 'img' and element_info.get('alt') and not self._is_generated(element_info['alt'], 'alt'):
+                candidates.append(f"img[alt='{element_info['alt']}']")
+            
+            # Priority 4: Stable ID
+            if element_info.get('id') and not self._is_generated(element_info['id'], 'id'):
+                candidates.append(f"#{element_info['id']}")
+            
+            # Priority 5: Name attribute
+            if element_info.get('name') and not self._is_generated(element_info['name'], 'name'):
+                candidates.append(f"[name='{element_info['name']}']")
+            
+            # Priority 6: Href (links, path only)
+            if element_info['tag'] == 'a' and element_info.get('href'):
+                href = element_info['href']
+                # Strip query params and hash
+                href = href.split('?')[0].split('#')[0]
+                # Extract path if full URL
+                if href.startswith('http'):
+                    from urllib.parse import urlparse
+                    href = urlparse(href).path
+                if href and not self._is_generated(href, 'href'):
+                    candidates.append(f"a[href='{href}']")
+            
+            # Priority 7: Placeholder (for inputs)
+            if element_info.get('placeholder') and not self._is_generated(element_info['placeholder'], 'placeholder'):
+                candidates.append(f"[placeholder='{element_info['placeholder']}']")
+            
+            # Priority 8: Role + text (partial match)
+            tag = element_info['tag']
+            if element_info.get('role') and element_info.get('text'):
+                text_escaped = self._escape_xpath_string(element_info['text'])
+                candidates.append(f"//*[@role='{element_info['role']}' and contains(., {text_escaped})]")
+            
+            # Priority 9: Partial text match
+            if element_info.get('text'):
+                if tag in ['button', 'a', 'span', 'label']:
+                    text_escaped = self._escape_xpath_string(element_info['text'])
+                    candidates.append(f"//{tag}[contains(., {text_escaped})]")
+            
+            # Test each candidate for uniqueness
+            for selector in candidates:
+                try:
+                    count = await page.locator(selector).count()
+                    
+                    if count == 1:
+                        return {
+                            'selector': selector,
+                            'method': 'css' if not selector.startswith('//') else 'xpath'
+                        }
+                    
+                    elif count > 1:
+                        # Try adding parent context to make it unique
+                        refined = await self._try_parent_context(selector, element_handle, page)
+                        if refined:
+                            return {
+                                'selector': refined,
+                                'method': 'css' if not refined.startswith('//') else 'xpath'
+                            }
+                    
+                except Exception:
+                    continue
+            
+            # Fallback: position-based XPath
+            xpath = await self._generate_xpath_fallback(element_handle)
+            return {'selector': xpath, 'method': 'xpath'}
+            
+        except Exception:
+            return {'selector': f"//{element_info.get('tag', 'body')}", 'method': 'xpath'}
     
-    def _build_unique_xpath(self, target_element, ancestors) -> str:
-        """Build XPath with uniqueness verification"""
-        tag_name = target_element['tagName']
-        attributes = target_element['attributes']
-        text_content = target_element['textContent']
-        
-        clean_attrs = self._get_clean_attributes(target_element)
-        candidates = []
-        
-        # Priority 1: Clean ID
-        if 'id' in clean_attrs:
-            candidates.append(f'//[@id="{clean_attrs["id"]}"]')
-        
-        # Priority 2: Element type + clean name
-        if 'name' in clean_attrs:
-            candidates.append(f'//{tag_name}[@name="{clean_attrs["name"]}"]')
-        
-        # Priority 3: Element type + test attributes
-        test_attrs = ['data-testid', 'data-cy', 'data-test', 'data-automation', 'data-qa']
-        for attr in test_attrs:
-            if attr in clean_attrs:
-                candidates.append(f'//{tag_name}[@{attr}="{clean_attrs[attr]}"]')
-        
-        # Priority 4: Element type + stable text content
-        if (text_content and len(text_content) < 50 and 
-            tag_name in ['button', 'a', 'span', 'label'] and
-            not self._is_random(text_content)):
-            candidates.append(f'//{tag_name}[text()="{text_content}"]')
-        
-        # Priority 5: Element type + type attribute
-        if 'type' in attributes:
-            candidates.append(f'//{tag_name}[@type="{attributes["type"]}"]')
-        
-        # Priority 6: Just element type
-        candidates.append(f'//{tag_name}')
-        
-        base_selector = candidates[0] if candidates else f'//{tag_name}'
-        
-        if len(candidates) > 1 or not ('id' in clean_attrs):
-            return self._add_ancestor_context(base_selector, ancestors)
-        
-        return base_selector
+    # Parent selector builder functions
+    def _build_parent_testid(self, parent: Dict, value: str, as_xpath: bool) -> str:
+        """Build testid parent selector"""
+        if as_xpath:
+            value_esc = self._escape_xpath_string(value)
+            return f"//*[@data-testid={value_esc}]"
+        else:
+            value_esc = self._escape_css_string(value)
+            return f"[data-testid={value_esc}]"
     
-    def _is_blacklisted(self, element_tag: str, attribute: str, value: str) -> bool:
-        """Check if element+attribute combination is blacklisted"""
-        for item in self.blacklist:
-            if (item.get("element") == element_tag and 
-                item.get("attribute") == attribute and 
-                item.get("value") == value):
-                return True
-        return False
+    def _build_parent_id(self, parent: Dict, value: str, as_xpath: bool) -> str:
+        """Build id parent selector"""
+        if as_xpath:
+            value_esc = self._escape_xpath_string(value)
+            return f"//*[@id={value_esc}]"
+        else:
+            value_esc = self._escape_css_string(value)
+            # CSS ID selector: strip quotes from escaped value
+            value_clean = value_esc.strip('"')
+            return f"#{value_clean}"
     
-    def _get_clean_attributes(self, element_info: Dict) -> Dict[str, str]:
-        """Get clean attributes, filtering out blacklisted and random values"""
-        tag_name = element_info['tagName']
-        attributes = element_info['attributes']
-        clean_attrs = {}
+    def _build_parent_aria_label(self, parent: Dict, value: str, as_xpath: bool) -> str:
+        """Build aria-label parent selector"""
+        if as_xpath:
+            value_esc = self._escape_xpath_string(value)
+            return f"//{parent['tag']}[@aria-label={value_esc}]"
+        else:
+            value_esc = self._escape_css_string(value)
+            return f"{parent['tag']}[aria-label={value_esc}]"
+    
+    def _build_parent_name(self, parent: Dict, value: str, as_xpath: bool) -> str:
+        """Build name parent selector"""
+        if as_xpath:
+            value_esc = self._escape_xpath_string(value)
+            return f"//{parent['tag']}[@name={value_esc}]"
+        else:
+            value_esc = self._escape_css_string(value)
+            return f"{parent['tag']}[name={value_esc}]"
+    
+    def _build_parent_tag(self, parent: Dict, value: str, as_xpath: bool) -> str:
+        """Build tag-only parent selector (fallback)"""
+        return f"//{parent['tag']}" if as_xpath else parent['tag']
+    
+    # Parent selector registry: (attr_key, attr_name, builder_function)
+    _PARENT_SELECTOR_REGISTRY = [
+        ('testId', 'data-testid', _build_parent_testid),
+        ('id', 'id', _build_parent_id),
+        ('ariaLabel', 'aria-label', _build_parent_aria_label),
+        ('name', 'name', _build_parent_name),
+        ('tag', 'tag', _build_parent_tag),
+    ]
+    
+    def _build_parent_selectors(self, parent: Dict, as_xpath: bool) -> List[str]:
+        """
+        Build parent selectors using registry pattern.
         
-        for attr_name, attr_value in attributes.items():
-            if self._is_blacklisted(tag_name, attr_name, attr_value):
+        To add new attribute:
+        1. Define builder function (copy existing pattern)
+        2. Add to _PARENT_SELECTOR_REGISTRY
+        """
+        selectors = []
+        
+        for attr_key, attr_name, builder_fn in self._PARENT_SELECTOR_REGISTRY:
+            # Tag is always added as fallback
+            if attr_key == 'tag':
+                selectors.append(builder_fn(self, parent, None, as_xpath))
                 continue
-            if self._is_random(attr_value):
+            
+            # Check attribute exists and not generated
+            value = parent.get(attr_key)
+            if not value or self._is_generated(value, attr_name):
                 continue
-            clean_attrs[attr_name] = attr_value
+            
+            # Build selector using registered function
+            selector = builder_fn(self, parent, value, as_xpath)
+            selectors.append(selector)
         
-        return clean_attrs
+        return selectors
     
-    def _is_random(self, value: str) -> bool:
-        """Check if attribute value looks auto-generated"""
-        if not value or len(value) < 2 or len(value) > 30:
-            return True
+    async def _try_parent_context(self, base_selector, element_handle, page: Page) -> Optional[str]:
+        """Try adding parent context to make selector unique"""
+        try:
+            # Get parent chain up to body/html
+            parents = await element_handle.evaluate("""
+                el => {
+                    const parents = [];
+                    let current = el.parentElement;
+                    let iterations = 0;
+                    
+                    while (current && iterations < 100) {
+                        // Stop at document root
+                        if (current.tagName === 'BODY' || current.tagName === 'HTML') {
+                            break;
+                        }
+                        
+                        parents.push({
+                            tag: current.tagName.toLowerCase(),
+                            id: current.id,
+                            testId: current.getAttribute('data-testid'),
+                            ariaLabel: current.getAttribute('aria-label'),
+                            name: current.name
+                        });
+                        
+                        current = current.parentElement;
+                        iterations++;
+                    }
+                    
+                    return parents;
+                }
+            """)
+            
+            if len(parents) == 0:
+                return None
+            
+            # Determine if base selector is XPath
+            is_xpath = base_selector.startswith('//')
+            
+            # Try each parent level (closest to furthest)
+            for parent in parents:
+                # Build parent selectors in priority order
+                parent_selectors = self._build_parent_selectors(parent, is_xpath)
+                
+                # Test each parent selector
+                for parent_sel in parent_selectors:
+                    # Combine parent + base selector
+                    if is_xpath:
+                        selector = f"{parent_sel}{base_selector}"  # XPath: no space
+                    else:
+                        selector = f"{parent_sel} {base_selector}"  # CSS: space separator
+                    
+                    try:
+                        count = await page.locator(selector).count()
+                        if count == 1:
+                            return selector
+                    except Exception as e:
+                        if is_debug():
+                            print(f"[DEBUG] Parent selector failed: '{selector}' - {type(e).__name__}: {e}")
+                        continue
+            
+            return None
+            
+        except Exception:
+            return None
+    
+    async def _generate_xpath_fallback(self, element_handle) -> str:
+        """Generate position-based XPath as fallback"""
+        return await element_handle.evaluate("""
+            el => {
+                const getPath = (element) => {
+                    if (element.id && !/^[0-9]/.test(element.id))
+                        return `//*[@id="${element.id}"]`;
+                    
+                    const parts = [];
+                    while (element && element.nodeType === Node.ELEMENT_NODE) {
+                        let index = 1;
+                        let sibling = element.previousSibling;
+                        while (sibling) {
+                            if (sibling.nodeType === Node.ELEMENT_NODE && 
+                                sibling.tagName === element.tagName) index++;
+                            sibling = sibling.previousSibling;
+                        }
+                        
+                        const tagName = element.tagName.toLowerCase();
+                        const part = index > 1 ? `${tagName}[${index}]` : tagName;
+                        parts.unshift(part);
+                        
+                        element = element.parentElement;
+                        if (element?.tagName === 'BODY') break;
+                    }
+                    return '//' + parts.join('/');
+                };
+                return getPath(el);
+            }
+        """)
+    
+    def _escape_xpath_string(self, text: str) -> str:
+        """Escape quotes in XPath strings"""
+        if not text:
+            return '""'
         
+        # No quotes - use double quotes
+        if '"' not in text and "'" not in text:
+            return f'"{text}"'
+        
+        # Only double quotes - use single quotes
+        if '"' in text and "'" not in text:
+            return f"'{text}'"
+        
+        # Only single quotes - use double quotes
+        if "'" in text and '"' not in text:
+            return f'"{text}"'
+        
+        # Both quotes - use concat
+        parts = []
+        current = []
+        for char in text:
+            if char == '"':
+                if current:
+                    parts.append(f'"{{"".join(current)}}"')
+                    current = []
+                parts.append("'\"'")
+            else:
+                current.append(char)
+        if current:
+            parts.append(f'"{{"".join(current)}}"')
+        
+        return f"concat({', '.join(parts)})"
+    
+    def _escape_css_string(self, text: str) -> str:
+        """Escape quotes in CSS attribute selectors"""
+        if not text:
+            return '""'
+        # Escape backslashes and quotes
+        text = text.replace('\\', '\\\\').replace('"', '\\"')
+        return f'"{text}"'
+    
+    def _is_generated(self, value: str, context: str = 'generic') -> bool:
+        """
+        Check if attribute value looks dynamically generated.
+        
+        Args:
+            value: The attribute value to check (assumed non-empty)
+            context: Type of attribute being checked
+        
+        Returns:
+            True if value appears to be auto-generated, False otherwise
+        """
+        # Pass-through contexts (never consider generated)
+        if context in ['href', 'text', 'aria-label', 'alt', 'placeholder']:
+            return False
+        
+        # For id, name, testid, and generic: check against code identifier patterns
         SEMANTIC_PATTERNS = [
-            r'^[a-z]+$',
-            r'^[a-z]+-[a-z]+(-[a-z]+)*$',
-            r'^[a-z]+[A-Z][a-z]*([A-Z][a-z]*)*$',
-            r'^[a-z]+_[a-z]+(_[a-z]+)*$',
-            r'^[A-Z][a-z]+([A-Z][a-z]*)*$',
+            r'^[a-z]+$',                              # lowercase: "header"
+            r'^[A-Z]+$',                              # UPPERCASE: "OK"
+            r'^[a-z]+-[a-z]+(-[a-z]+)*$',            # kebab-case: "user-profile"
+            r'^[a-z]+[A-Z][a-z]*([A-Z][a-z]*)*$',    # camelCase: "userName"
+            r'^[a-z]+_[a-z]+(_[a-z]+)*$',            # snake_case: "user_name"
+            r'^[A-Z][a-z]+([A-Z][a-z]*)*$',          # PascalCase: "UserName"
+            r'^\d+$',                                 # Numbers: "1", "123"
         ]
         
         return not any(re.match(pattern + '$', value) for pattern in SEMANTIC_PATTERNS)
     
-    def _add_ancestor_context(self, base_selector, ancestors):
-        """Add ancestor context to improve specificity"""
-        if not ancestors:
-            return base_selector
-        
-        for ancestor in ancestors:
-            ancestor_context = self._get_clean_ancestor_selector(ancestor)
-            if ancestor_context:
-                return f"{ancestor_context}{base_selector}"
-        
-        return base_selector
-    
-    def _get_clean_ancestor_selector(self, ancestor_info):
-        """Get clean selector for ancestor element"""
-        tag_name = ancestor_info['tagName']
-        clean_attrs = self._get_clean_attributes(ancestor_info)
-        
-        if tag_name in ['form', 'nav', 'main', 'section', 'article', 'header', 'footer']:
-            return f"//{tag_name}"
-        
-        if 'id' in clean_attrs:
-            return f'//[@id="{clean_attrs["id"]}"]'
-        
-        if 'class' in clean_attrs:
-            classes = clean_attrs['class'].split()
-            for cls in classes:
-                if not self._is_blacklisted(tag_name, 'class', cls) and not self._is_random(cls):
-                    return f'//{tag_name}[contains(@class, "{cls}")]'
-        
-        return None

@@ -7,6 +7,7 @@ from typing import Dict, Optional, Any
 from playwright.async_api import async_playwright, Browser, BrowserContext, Page
 
 from src.utils.browser_detector import BrowserDetector
+from src.utils.url_helper import normalize_and_navigate
 
 class BrowserController:
     """Control browser instances using async Playwright with detected browsers"""
@@ -118,6 +119,9 @@ class BrowserController:
             self.contexts[alias] = context
             self.pages[alias] = page
             
+            # Notify observers
+            self._notify_state_change('launched', alias)
+            
             return {'success': True, 'error': None}
             
         except Exception as e:
@@ -127,22 +131,15 @@ class BrowserController:
             }
     
     async def navigate(self, url: str, alias: str = "main") -> Dict[str, Any]:
-        """Navigate to URL"""
+        """Navigate to URL with HTTPS->HTTP fallback"""
         if alias not in self.pages:
             return {
                 'success': False,
                 'error': f"No browser instance with alias '{alias}'"
             }
         
-        try:
-            page = self.pages[alias]
-            await page.goto(url)
-            return {'success': True, 'error': None}
-        except Exception as e:
-            return {
-                'success': False,
-                'error': f"Failed to navigate to {url}: {str(e)}"
-            }
+        page = self.pages[alias]
+        return await normalize_and_navigate(page, url)
     
     def get_available_browsers(self) -> Dict[str, str]:
         """Get list of available browsers"""
@@ -204,15 +201,46 @@ class BrowserController:
         return self.pages.get(alias)
     
     def is_browser_running(self, alias: str = "main") -> bool:
-        """Check if browser process is running (simple check)"""
+        """Check if browser process is running with health validation"""
         if alias not in self.browsers:
             return False
         
         try:
             browser = self.browsers[alias]
-            return browser.is_connected()
-        except:
+            if not browser.is_connected():
+                self._cleanup_dead_browser(alias)
+                return False
+                
+            page = self.pages.get(alias)
+            if not page:
+                return False
+            
+            if page.is_closed():
+                self._cleanup_dead_browser(alias)
+                return False
+                
+            return True
+            
+        except Exception as e:
+            self._cleanup_dead_browser(alias)
             return False
+    
+    def _cleanup_dead_browser(self, alias: str):
+        """Remove dead browser references"""
+        self.pages.pop(alias, None)
+        self.contexts.pop(alias, None)
+        self.browsers.pop(alias, None)
+        self._notify_state_change('closed', alias)
+    
+    def _notify_state_change(self, event_type: str, alias: str):
+        """Notify observers of browser state change"""
+        try:
+            from src.app_services import get_browser_state_observer
+            observer = get_browser_state_observer()
+            observer.notify(event_type, alias)
+        except Exception as e:
+            # Don't let observer errors break browser operations
+            print(f"Error notifying browser state change: {e}")
     
     async def get_page_title(self, alias: str = "main") -> Optional[str]:
         """Get current page title"""
@@ -253,8 +281,10 @@ class BrowserController:
             }
     
     def get_existing_page(self, alias: str = "main") -> Optional[Page]:
-        """Get existing page or None if not found"""
-        return self.pages.get(alias)
+        """Get existing page with health validation"""
+        if self.is_browser_running(alias):
+            return self.pages.get(alias)
+        return None
     
     def resolve_browser_alias(self, action: Dict, workflow: Dict) -> str:
         """
@@ -306,6 +336,16 @@ class BrowserController:
             self.pages.pop(alias, None)
             self.contexts.pop(alias, None)
             self.browsers.pop(alias, None)
+            
+            # Notify observers
+            self._notify_state_change('closed', alias)
+            
             return True
         except:
             return False
+    
+    def rename_browser_alias(self, old_alias: str, new_alias: str):
+        """Rename browser alias without killing browser"""
+        for storage in [self.browsers, self.contexts, self.pages]:
+            if old_alias in storage:
+                storage[new_alias] = storage.pop(old_alias)

@@ -1,188 +1,257 @@
 """
-Browser Configuration Section - Collapsible browser settings
+Browser Configuration Section - Container for browser instances
 """
 
 import customtkinter as ctk
-from typing import Dict, Optional
+from typing import Dict, Callable
+from tkinter import messagebox
 from async_tkinter_loop import async_handler
+from ui.components.accordion import Accordion
+from ui.components.browser_instance import BrowserInstance
+from src.utils.browser_validation import BrowserValidator
 from src.app_services import get_browser_controller
 
 
 class BrowserConfigSection(ctk.CTkFrame):
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.is_expanded = True
+    """Container for browser instance(s)"""
+    
+    def __init__(self, parent, get_workflow: Callable, on_workflow_changed: Callable):
+        super().__init__(parent, fg_color="transparent")
+        self.get_workflow = get_workflow
+        self.on_workflow_changed = on_workflow_changed
+        self.instances = {}
         self.setup_ui()
     
     def setup_ui(self):
         """Setup the browser configuration UI"""
-        # Header with collapse button
-        header = ctk.CTkFrame(self)
-        header.pack(fill="x", padx=5, pady=5)
+        # Accordion for collapsible section
+        self.accordion = Accordion(self, title="Browser Configuration", expanded=True)
+        self.accordion.pack(fill="x", padx=5, pady=5)
         
-        self.collapse_button = ctk.CTkButton(
-            header, 
-            text="▼ Browser Configuration",
-            command=self.toggle_collapse,
-            width=200,
-            anchor="w"
-        )
-        self.collapse_button.pack(side="left", padx=5)
-        
-        # Status indicator
-        self.status_label = ctk.CTkLabel(header, text="⚪ Not Running")
-        self.status_label.pack(side="left", padx=10)
-        
-        # Content frame (collapsible)
-        self.content_frame = ctk.CTkFrame(self)
-        self.content_frame.pack(fill="x", padx=10, pady=5)
-        
-        # Browser type
-        browser_frame = ctk.CTkFrame(self.content_frame)
-        browser_frame.pack(fill="x", padx=10, pady=5)
-        
-        ctk.CTkLabel(browser_frame, text="Browser Type:").pack(side="left", padx=(10, 5))
-        self.browser_combo = ctk.CTkComboBox(
-            browser_frame, 
-            values=["chrome", "firefox", "edge"],
-            width=150
-        )
-        self.browser_combo.pack(side="left", padx=5)
-        self.browser_combo.set("chrome")
-        
-        # Starting URL
-        url_frame = ctk.CTkFrame(self.content_frame)
-        url_frame.pack(fill="x", padx=10, pady=5)
-        
-        ctk.CTkLabel(url_frame, text="Starting URL:").pack(side="left", padx=(10, 5))
-        self.url_entry = ctk.CTkEntry(
-            url_frame, 
-            placeholder_text="https://example.com (optional)"
-        )
-        self.url_entry.pack(side="left", fill="x", expand=True, padx=5)
-        
-        # Control buttons
-        button_frame = ctk.CTkFrame(self.content_frame)
-        button_frame.pack(fill="x", padx=10, pady=5)
-        
-        self.launch_button = ctk.CTkButton(
-            button_frame,
-            text="Launch Browser",
-            command=self.on_launch_clicked
-        )
-        self.launch_button.pack(side="left", padx=(10, 5))
-        
-        self.close_button = ctk.CTkButton(
-            button_frame,
-            text="Close Browser",
-            command=self.on_close_clicked,
-            state="disabled"
-        )
-        self.close_button.pack(side="left", padx=5)
+        # Create instances based on workflow
+        self.refresh_instances()
     
-    def toggle_collapse(self):
-        """Toggle the collapsed state"""
-        self.is_expanded = not self.is_expanded
+    def refresh_instances(self):
+        """Rebuild instances when workflow browsers change"""
+        # Clear existing
+        for widget in self.accordion.content_frame.winfo_children():
+            widget.destroy()
         
-        if self.is_expanded:
-            self.content_frame.pack(fill="x", padx=10, pady=5)
-            self.collapse_button.configure(text="▼ Browser Configuration")
-        else:
-            self.content_frame.pack_forget()
-            self.collapse_button.configure(text="▶ Browser Configuration")
+        workflow = self.get_workflow()
+        if not workflow:
+            return  # No workflow loaded yet
+        
+        browsers = workflow.get('browsers', {})
+        show_alias = len(browsers) > 1
+        show_delete = len(browsers) > 1
+        
+        # Create instances
+        self.instances = {}
+        for alias, config in browsers.items():
+            instance = BrowserInstance(
+                self.accordion.content_frame,
+                alias=alias,
+                show_alias=show_alias,
+                show_delete=show_delete,
+                on_save=self.save_config,
+                on_delete=self.delete_browser,
+                on_rename=self.rename_browser
+            )
+            instance.set_config(config)
+            instance.pack(fill="x", padx=5, pady=5)
+            self.instances[alias] = instance
+        
+        # TEMPORARY: Add Browser button (recreated after refresh)
+        add_btn = ctk.CTkButton(
+            self.accordion.content_frame,
+            text="+ Add Browser",
+            command=self.add_browser,
+            fg_color="#2b8a3e",
+            hover_color="#2f9e44"
+        )
+        add_btn.pack(fill="x", padx=5, pady=5)
     
-    def get_config(self) -> Dict:
-        """Get current browser configuration"""
-        return {
-            "browser_type": self.browser_combo.get(),
-            "starting_url": self.url_entry.get()
-        }
+    def save_config(self, alias: str, config: Dict):
+        """Save browser configuration"""
+        workflow = self.get_workflow()
+        if not workflow:
+            return
+        
+        # Validate
+        is_valid, error = BrowserValidator.validate_config(
+            alias,
+            config,
+            workflow['browsers'],
+            old_alias=alias
+        )
+        
+        if not is_valid:
+            messagebox.showerror("Validation Error", error)
+            return
+        
+        # Update config
+        workflow['browsers'][alias] = config
+        
+        # Save
+        from src.utils.workflow_files import save_workflow
+        if not save_workflow(workflow):
+            messagebox.showerror("Save Failed", "Could not save workflow.")
+            return
+        
+        # Notify parent
+        self.on_workflow_changed()
     
-    def set_config(self, config: Dict):
-        """Set browser configuration"""
-        browser_type = config.get("browser_type", "chrome")
-        self.browser_combo.set(browser_type)
+    def rename_browser(self, old_alias: str):
+        """Open rename dialog for browser"""
+        from ui.components.rename_dialog import RenameDialog
         
-        starting_url = config.get("starting_url", "")
-        self.url_entry.delete(0, "end")
-        self.url_entry.insert(0, starting_url)
+        dialog = RenameDialog(
+            parent=self.winfo_toplevel(),
+            current_alias=old_alias,
+            on_save=lambda new_alias: self._do_rename(old_alias, new_alias)
+        )
+    
+    def _do_rename(self, old_alias: str, new_alias: str):
+        """Execute browser rename with validation and save-first pattern"""
+        workflow = self.get_workflow()
+        if not workflow:
+            return
         
-        self.update_button_states()
+        # Validate
+        is_valid, error = BrowserValidator.validate_config(
+            new_alias,
+            workflow['browsers'][old_alias],
+            workflow['browsers'],
+            old_alias=old_alias
+        )
+        
+        if not is_valid:
+            messagebox.showerror("Validation Error", error)
+            return
+        
+        # Store original state for rollback
+        original_browser = workflow['browsers'][old_alias].copy()
+        original_actions = [a.copy() for a in workflow.get('actions', [])]
+        
+        # Update workflow (in-memory)
+        workflow['browsers'][new_alias] = workflow['browsers'].pop(old_alias)
+        
+        # Cascade to actions
+        for action in workflow['actions']:
+            if action.get('browser_alias') == old_alias:
+                action['browser_alias'] = new_alias
+        
+        # SAVE FIRST
+        from src.utils.workflow_files import save_workflow
+        if not save_workflow(workflow):
+            # Rollback
+            workflow['browsers'][old_alias] = original_browser
+            if new_alias in workflow['browsers']:
+                del workflow['browsers'][new_alias]
+            workflow['actions'] = original_actions
+            messagebox.showerror("Save Failed", "Could not save workflow. Rename cancelled.")
+            return
+        
+        # Update runtime
+        browser_controller = get_browser_controller()
+        browser_controller.rename_browser_alias(old_alias, new_alias)
+        
+        # Notify parent and refresh
+        self.on_workflow_changed()
+        self.refresh_instances()
     
     @async_handler
-    async def on_launch_clicked(self):
-        """Handle launch button click"""
-        browser_type = self.browser_combo.get()
-        starting_url = self.url_entry.get().strip()
+    async def delete_browser(self, alias: str):
+        """Delete browser with confirmation and save-first pattern"""
+        workflow = self.get_workflow()
+        if not workflow:
+            return
         
-        self.status_label.configure(text="⚪ Launching...")
-        self.launch_button.configure(state="disabled")
+        # Validate not last browser
+        if len(workflow['browsers']) == 1:
+            messagebox.showerror(
+                "Cannot Delete",
+                "Workflow must have at least one browser."
+            )
+            return
         
-        try:
-            controller = get_browser_controller()
-            
-            if controller.is_browser_running("main"):
-                self.status_label.configure(text="🟢 Already Running")
-                self.launch_button.configure(state="disabled")
-                self.close_button.configure(state="normal")
+        # Count actions using this browser
+        action_count = sum(
+            1 for action in workflow.get('actions', [])
+            if action.get('browser_alias') == alias
+        )
+        
+        # Confirm deletion
+        if action_count > 0:
+            response = messagebox.askyesno(
+                "Delete Browser",
+                f"{action_count} action(s) use this browser.\n\n"
+                f"If you proceed, they will be deleted.\n\n"
+                f"Continue?",
+                icon='warning'
+            )
+            if not response:
                 return
-            
-            result = await controller.launch_browser(browser_type, "main")
-            
-            if result['success']:
-                if starting_url:
-                    nav_result = await controller.navigate(starting_url, "main")
-                    if not nav_result['success']:
-                        self.status_label.configure(text="⚠️ Navigation Failed")
-                        self.launch_button.configure(state="normal")
-                        return
-                
-                self.status_label.configure(text="🟢 Running")
-                self.launch_button.configure(state="disabled")
-                self.close_button.configure(state="normal")
-            else:
-                self.status_label.configure(text="🔴 Failed")
-                self.launch_button.configure(state="normal")
-        except Exception as e:
-            self.status_label.configure(text="🔴 Error")
-            self.launch_button.configure(state="normal")
-    
-    def update_button_states(self):
-        """Update button states based on browser status"""
-        try:
-            controller = get_browser_controller()
-            is_running = controller.is_browser_running("main")
-            
-            if is_running:
-                self.status_label.configure(text="🟢 Running")
-                self.launch_button.configure(state="disabled")
-                self.close_button.configure(state="normal")
-            else:
-                self.status_label.configure(text="⚪ Not Running")
-                self.launch_button.configure(state="normal")
-                self.close_button.configure(state="disabled")
-        except:
-            self.status_label.configure(text="⚪ Not Running")
-            self.launch_button.configure(state="normal")
-            self.close_button.configure(state="disabled")
-    
-    @async_handler
-    async def on_close_clicked(self):
-        """Handle close button click"""
-        self.status_label.configure(text="⚪ Closing...")
-        self.close_button.configure(state="disabled")
         
-        try:
-            controller = get_browser_controller()
-            success = await controller.close_browser_page("main")
-            
-            if success:
-                self.status_label.configure(text="⚪ Not Running")
-                self.launch_button.configure(state="normal")
-                self.close_button.configure(state="disabled")
-            else:
-                self.status_label.configure(text="⚠️ Close Failed")
-                self.close_button.configure(state="normal")
-        except Exception as e:
-            self.status_label.configure(text="🔴 Error")
-            self.close_button.configure(state="normal")
+        # Store original state for rollback
+        original_browser = workflow['browsers'][alias].copy()
+        original_actions = [a.copy() for a in workflow.get('actions', [])]
+        
+        # Update workflow (in-memory)
+        del workflow['browsers'][alias]
+        workflow['actions'] = [
+            action for action in workflow['actions']
+            if action.get('browser_alias') != alias
+        ]
+        
+        # SAVE FIRST (before closing browser)
+        from src.utils.workflow_files import save_workflow
+        if not save_workflow(workflow):
+            # Rollback on save failure
+            workflow['browsers'][alias] = original_browser
+            workflow['actions'] = original_actions
+            messagebox.showerror(
+                "Save Failed",
+                "Could not save workflow. Deletion cancelled."
+            )
+            return
+        
+        # NOW close browser (after successful save)
+        browser_controller = get_browser_controller()
+        if browser_controller.is_browser_running(alias):
+            await browser_controller.close_browser_page(alias)
+        
+        # Notify parent
+        self.on_workflow_changed()
+        
+        # Refresh UI
+        self.refresh_instances()
+    
+    def add_browser(self):
+        """TEMPORARY: Add new browser for testing"""
+        workflow = self.get_workflow()
+        if not workflow:
+            return
+        
+        # Generate unique alias
+        existing_aliases = set(workflow['browsers'].keys())
+        counter = 2
+        while f"browser{counter}" in existing_aliases:
+            counter += 1
+        new_alias = f"browser{counter}"
+        
+        # Add new browser with default config
+        workflow['browsers'][new_alias] = {
+            'browser_type': 'chrome',
+            'starting_url': ''
+        }
+        
+        # Save
+        from src.utils.workflow_files import save_workflow
+        if not save_workflow(workflow):
+            messagebox.showerror("Save Failed", "Could not save workflow.")
+            return
+        
+        # Notify parent and refresh
+        self.on_workflow_changed()
+        self.refresh_instances()
