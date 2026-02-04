@@ -42,36 +42,44 @@ WebAutomationTool/
 │   ├── pages/                      # Application pages
 │   │   ├── workflow_execution.py
 │   │   ├── workflow_management.py
-│   │   ├── subscription.py
-│   │   ├── test_page.py
-│   │   └── browser_test.py
+│   │   └── subscription.py
 │   └── components/                 # Reusable UI components
 │       ├── workflow_list_view.py
-│       ├── workflow_editor_view.py
-│       ├── browser_config_section.py  # Browser lifecycle management
-│       ├── data_sample_status.py   # Data sample status indicator
-│       ├── actions_list.py         # Inline action editor
+│       ├── workflow_single_page_editor.py  # Full workflow editor
+│       ├── workflow_wizard_editor.py       # Step-by-step wizard editor
+│       ├── two_option_toggle.py            # Generic toggle component
+│       ├── browser_config_section.py      # Browser lifecycle management
+│       ├── data_sample_status.py          # Data sample status indicator
+│       ├── actions_list.py                # Inline action editor
+│       ├── action_overlay.py              # Full-app blocking overlay
 │       ├── status_bar.py
-│       └── fields/                 # Field component library
-│           ├── action_value_input.py    # Value with expression helper
-│           ├── text_input.py            # Generic text input
-│           ├── dropdown.py              # Generic dropdown
-│           ├── selector_picker.py       # Selector with element picker
-│           ├── key_picker.py            # Key capture with 🎹 button
-│           ├── number_input.py          # Numeric input with validation
+│       ├── menu_item.py                   # Navigation menu items
+│       ├── data_table.py               # Data preview component with wrapper pattern
+│       ├── status_bar.py                  # Application status display
+│       └── fields/                        # Field component library
+│           ├── action_value_input.py      # Value with expression helper
+│           ├── text_input.py              # Generic text input
+│           ├── dropdown.py                # Generic dropdown
+│           ├── selector_picker.py         # Selector with element picker
+│           ├── key_picker.py              # Key capture with 🎹 button
+│           ├── number_input.py            # Numeric input with validation
 │           └── data_expression_helper.py  # Column selector utility
 ├── src/                            # Business logic only
 │   ├── app_services.py             # Global service management
 │   ├── core/                       # Core automation modules
-│   │   ├── action_handlers.py      # Action registry + handler functions
 │   │   ├── action_execution.py     # Stateless action execution
+│   │   ├── action_handlers.py      # Action registry + handler functions
 │   │   ├── browser_controller.py   # Browser lifecycle management
-│   │   ├── workflow_executor.py    # Workflow orchestration
+│   │   ├── data_loader.py          # Multi-format data loading
+│   │   ├── element_picker.py       # Interactive element selection
 │   │   ├── template_processing.py  # Template resolution utility
-│   │   └── element_picker_toggle.py
+│   │   ├── theme_manager.py        # Theme system with component-specific colors
+│   │   ├── user_preferences.py     # Settings persistence
+│   │   └── workflow_executor.py    # Workflow orchestration
 │   └── utils/                      # Utility functions
 │       ├── workflow_files.py
-│       └── browser_detector.py
+│       ├── browser_detector.py
+│       └── state_manager.py        # Navigation and state management
 ├── user_data/                      # User-created content
 │   ├── workflows/                  # User workflow definitions
 │   ├── preferences/                # User settings
@@ -110,12 +118,12 @@ def save_action(self):
     # Trigger immediate persistence
     self.on_actions_changed(self.actions)
 
-# WorkflowEditorView.on_actions_changed() - Auto-save workflow
+# WorkflowSinglePageEditor.on_actions_changed() - Auto-save workflow
 def on_actions_changed(self, actions: List[Dict]):
     self.current_workflow['actions'] = actions
     save_workflow(self.current_workflow)  # Immediate disk save
 
-# WorkflowEditorView.save_workflow() - Workflow-level save
+# WorkflowSinglePageEditor.save_workflow() - Workflow-level save
 def save_workflow(self):
     self.current_workflow['name'] = self.name_entry.get()
     save_workflow(self.current_workflow)  # Save complete workflow
@@ -292,7 +300,69 @@ class SubscriptionPage(ctk.CTkFrame):
 
 ---
 
-## Application Bootstrap Architecture
+## Theme Management Architecture
+
+### **Component-Aware Theme System**
+
+**Problem Solved:** Consistent theming across all UI components with customizable color schemes
+
+**Solution:** Centralized theme manager with component-specific color definitions
+
+```python
+# src/core/theme_manager.py - Theme system
+def initialize_app_theme(app):
+    """Initialize theme system with CustomTkinter"""
+    theme_name = get_user_preference("theme", "dark")
+    ctk.set_appearance_mode(theme_name)
+    
+    # Load custom theme colors
+    load_custom_theme_colors()
+
+def get_component_colors(component_name: str) -> dict:
+    """Get theme-specific colors for component"""
+    return COMPONENT_COLORS.get(component_name, {})
+
+def switch_theme(theme_name: str):
+    """Switch theme and update session state"""
+    ctk.set_appearance_mode(theme_name)
+    set_session_state("pref_theme", theme_name)
+```
+
+**Component Integration:**
+```python
+# ui/components/menu_item.py - Theme-aware component
+class MenuItem(ctk.CTkLabel):
+    def __init__(self, parent, text: str, on_click=None):
+        self.colors = get_component_colors("MenuItemLabel")
+        super().__init__(parent, text=text, cursor="hand2")
+        
+    def set_current(self, is_current: bool):
+        if is_current:
+            self.configure(fg_color=self.colors.get("selected_bg", ["gray80", "gray25"]))
+```
+
+**Theme Configuration:**
+```json
+// config/custom_theme.json
+{
+  "MenuItemLabel": {
+    "hover_bg": ["gray85", "gray20"],
+    "selected_bg": ["gray80", "gray25"],
+    "default_bg": "transparent"
+  }
+}
+```
+
+**Benefits:**
+- ✅ **Consistent theming** - All components use same color system
+- ✅ **Easy customization** - JSON configuration for colors
+- ✅ **Component-specific** - Each component gets appropriate colors
+- ✅ **Session persistence** - Theme choice remembered
+- ✅ **Live switching** - Theme toggle updates immediately
+
+---
+
+
 
 ### **Clean Separation Pattern**
 
@@ -1302,7 +1372,7 @@ class WorkflowManagementPage(ctk.CTkFrame):
         self.list_view.grid(row=0, column=0, sticky="nsew")
         
         # Editor view
-        self.editor_view = WorkflowEditorView(self, on_save=self.on_save, on_cancel=self.show_list)
+        self.editor_view = WorkflowSinglePageEditor(self, on_save=self.on_save, on_cancel=self.show_list)
         self.editor_view.grid(row=0, column=0, sticky="nsew")
         self.editor_view.grid_remove()
     
@@ -2104,12 +2174,9 @@ class PageController:
 # ui/navigation/sidebar.py - Future-proof highlighting
 class SideNav(ctk.CTkFrame):
     def update_highlighting(self, current_page: str) -> None:
-        """Update menu button highlighting for current page"""
-        for page_name, button in self.menu_buttons.items():
-            if page_name == current_page:
-                button.configure(fg_color="#1f538d")  # Highlighted background
-            else:
-                button.configure(fg_color="transparent")  # Normal
+        """Update menu item highlighting for current page"""
+        for page_name, menu_item in self.menu_items.items():
+            menu_item.set_current(page_name == current_page)
 ```
 
 **Design Rationale:**
@@ -2376,3 +2443,193 @@ def save_session_to_preferences():
 ---
 
 *This enhanced navigation architecture provides intelligent state management while maintaining clean separation of concerns. The hybrid state approach optimizes performance while ensuring critical navigation context is never lost, creating a seamless user experience that scales with application growth.*
+
+---
+
+## ActionOverlay Architecture
+
+### **Full-App Blocking Overlay Pattern**
+
+**Problem Solved:** Users need clear guidance during blocking operations (element picker, key capture) without platform dependencies or visual confusion
+
+**Solution:** Reusable full-app overlay component using CTkFrame with place() geometry
+
+### **Component Design**
+
+**ActionOverlay** - Cross-platform blocking overlay with callback pattern
+
+```python
+# ui/components/action_overlay.py
+class ActionOverlay(ctk.CTkFrame):
+    """Full app overlay for blocking operations with cancel support"""
+    
+    def __init__(self, parent, title: str, message: str, on_cancel: Callable):
+        super().__init__(parent)  # Uses theme colors naturally
+        self.on_cancel = on_cancel
+        self.setup_ui(title, message)
+        self.show()
+    
+    def show(self):
+        """Show overlay covering entire app"""
+        self.place(x=0, y=0, relwidth=1, relheight=1)
+        self.lift()  # Ensure it's on top
+    
+    def close(self):
+        """Remove overlay"""
+        self.place_forget()
+        self.destroy()
+```
+
+**Key Features:**
+- **Full app coverage** - Overlay covers entire application window
+- **Natural blocking** - CTkFrame absorbs all mouse/keyboard events
+- **Theme compliant** - Uses app's existing color scheme
+- **Callback pattern** - Clean separation of concerns
+- **Cross-platform** - No OS-specific dependencies
+
+### **Integration Pattern**
+
+**Element Picker Integration:**
+```python
+# ui/components/actions_list.py - Element picker with overlay
+@async_handler
+async def on_element_picker_clicked(self, selector_field):
+    # Show overlay with instructions
+    overlay = ActionOverlay(
+        parent=self.winfo_toplevel(),
+        title="🎯 Element Picker Active",
+        message="Go to your browser and click the element\nyou want to select.",
+        on_cancel=lambda: self.cancel_element_picker(page, overlay)
+    )
+    
+    # Launch picker (overlay blocks UI during operation)
+    result = await picker.pick_element(page)
+    overlay.close()  # Remove overlay when done
+```
+
+**Key Capture Integration:**
+```python
+# ui/components/fields/key_picker.py - Key capture with overlay
+def start_key_capture(self):
+    self.overlay = ActionOverlay(
+        parent=self.winfo_toplevel(),
+        title="🎹 Key Capture Active",
+        message="Press the key you want to use\nfor this action.",
+        on_cancel=self.cancel_key_capture
+    )
+    # Start key listening...
+```
+
+### **Design Benefits**
+
+**User Experience:**
+- ✅ **Clear guidance** - User knows exactly what action is required
+- ✅ **Visual blocking** - Obviously prevents other interactions
+- ✅ **Cancellation support** - User can abort operation cleanly
+- ✅ **Context preservation** - Can see blocked content underneath
+
+**Architecture:**
+- ✅ **Reusable component** - Same overlay for different blocking operations
+- ✅ **Clean separation** - UI component separate from business logic
+- ✅ **Callback pattern** - Caller controls cleanup and error handling
+- ✅ **Zero dependencies** - No external libraries required
+
+**Cross-Platform:**
+- ✅ **No OS-specific code** - Works identically on Windows/macOS/Linux
+- ✅ **No transparency dependencies** - Avoids platform-specific libraries
+- ✅ **Theme integration** - Respects user's light/dark mode preference
+
+### **Usage Examples**
+
+**Element Picker Instructions:**
+```
+🎯 Element Picker Active
+
+Go to your browser and click the element
+you want to select.
+
+The element will be highlighted as you hover.
+
+[Cancel]
+```
+
+**Key Capture Instructions:**
+```
+🎹 Key Capture Active
+
+Press the key you want to use
+for this action.
+
+Examples: Enter, Tab, Escape, Space
+
+[Cancel]
+```
+
+### **Modus Operandi Compliance**
+
+**✅ Architecture-first approach** - Discussed alternatives before implementation
+**✅ Cross-platform compatibility** - No platform-specific dependencies
+**✅ Clean separation of concerns** - UI component with callback pattern
+**✅ Zero technical debt** - No shortcuts or compromises
+**✅ Future maintainability** - Easy to extend for new blocking operations
+
+---
+
+## DataTable Wrapper Architecture
+
+### **Component-Specific TTK Styling with Wrapper Pattern**
+
+**Problem Solved:** Need for both pure table widget and user-friendly placeholder management
+
+**Solution:** Wrapper pattern with internal TTK component and public interface
+
+**Architecture:**
+```
+DataTable (Public API - CTkFrame)
+└── _TreeviewTable (Internal - CTkBaseClass)
+    └── ttk.Treeview (Component-specific styling)
+```
+
+**Implementation:**
+```python
+# Internal TTK component with theme integration
+class _TreeviewTable(ctk.CTkBaseClass):
+    """Internal TTK Treeview component - pure table widget, no placeholder"""
+    
+    def _apply_class_theme(self):
+        # Component-specific TTK styling with default theme foundation
+        style = ttk.Style()
+        style.theme_use("default")  # Foundation for custom styles
+        
+        style.configure("DataTable.Treeview", ...)
+        style.configure("DataTable.Treeview.Heading", ...)
+
+# Public wrapper with placeholder support
+class DataTable(ctk.CTkFrame):
+    """Public DataTable component with placeholder support"""
+    
+    def __init__(self, parent, **kwargs):
+        self.table = _TreeviewTable(self, **kwargs)
+        self.placeholder_label = ctk.CTkLabel(self, text="No data to display")
+    
+    def set_data(self, dataframe):
+        if dataframe is None or dataframe.empty:
+            self._show_placeholder()
+        else:
+            self._show_table()
+            self.table.set_data(dataframe)
+```
+
+**Benefits:**
+- ✅ **Clean separation** - Placeholder logic separate from table logic
+- ✅ **Component-specific styling** - Isolated TTK theming prevents conflicts
+- ✅ **Reusable core** - `_TreeviewTable` can be used elsewhere if needed
+- ✅ **Theme integration** - Proper CustomTkinter theme manager integration
+- ✅ **External control** - Parent decides placeholder vs table display
+
+**TTK Styling Features:**
+- **Default theme foundation** - `style.theme_use("default")` enables custom style names
+- **Component isolation** - `"DataTable.Treeview"` prevents conflicts with other Treeview widgets
+- **Class-level theme tracking** - Efficient theme application across instances
+- **JSON theme integration** - Colors from `config/custom_theme.json`
+- **Tuple color support** - Light/dark mode color resolution

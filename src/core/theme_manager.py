@@ -54,7 +54,11 @@ def load_custom_theme_colors():
     global _custom_theme_colors
     if _custom_theme_colors is None:
         try:
-            theme_file = Path("config/custom_theme.json")
+            # Read theme path from config.json
+            with open('config.json', 'r') as f:
+                config = json.load(f)
+            theme_file = Path(config.get('color_theme', 'config/custom_theme.json'))
+            
             if theme_file.exists():
                 with open(theme_file, 'r') as f:
                     _custom_theme_colors = json.load(f)

@@ -7,7 +7,7 @@ from typing import Callable, Optional
 from src.core.theme_manager import get_component_colors
 
 
-class MenuItemLabel(ctk.CTkLabel):
+class MenuItem(ctk.CTkLabel):
     """Custom menu item with hover effects and current page indication"""
     
     def __init__(self, parent, text: str, on_click: Optional[Callable] = None):

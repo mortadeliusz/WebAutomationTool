@@ -3,10 +3,17 @@
   "browsers": {
     "main": {
       "browser_type": "chrome",
-      "starting_url": ""
+      "starting_url": "http.//www.google.com"
     }
   },
-  "actions": [],
-  "created_at": "2026-01-19T11:21:24.340935",
-  "modified_at": "2026-01-19T11:21:24.340935"
+  "actions": [
+    {
+      "type": "click",
+      "browser_alias": "main",
+      "selector": "1232334",
+      "description": "121212"
+    }
+  ],
+  "created_at": "2026-01-20T16:45:12.936697",
+  "modified_at": "2026-01-22T14:03:34.677278"
 }

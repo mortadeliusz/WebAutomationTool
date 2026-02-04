@@ -255,6 +255,13 @@ class ActionsList(ctk.CTkFrame):
                 )
                 # Connect picker callback
                 component.set_picker_callback(self.on_element_picker_clicked)
+            elif component_type == 'key_picker':
+                from ui.components.fields.key_picker import KeyPickerField
+                component = KeyPickerField(
+                    self.fields_container,
+                    field_def.get('label', field_name),
+                    field_def.get('placeholder', '')
+                )
             else:
                 # Fallback to text input
                 component = TextInputField(
@@ -316,7 +323,8 @@ class ActionsList(ctk.CTkFrame):
         """Handle element picker button click"""
         try:
             from src.app_services import get_browser_controller
-            from src.core.element_picker_toggle import ElementPicker
+            from src.core.element_picker import ElementPicker
+            from ui.components.action_overlay import ActionOverlay
             
             browser_controller = get_browser_controller()
             page = await browser_controller.get_page("chrome", "main", "https://www.google.com", force_navigate=False)
@@ -325,8 +333,20 @@ class ActionsList(ctk.CTkFrame):
                 print("No active page for element picker")
                 return
             
+            # Show overlay
+            overlay = ActionOverlay(
+                parent=self.winfo_toplevel(),
+                title="🎯 Element Picker Active",
+                message="Go to your browser and click the element\nyou want to select.\n\nThe element will be highlighted as you hover.",
+                on_cancel=lambda: self.cancel_element_picker(page, overlay)
+            )
+            
+            # Launch picker
             picker = ElementPicker()
             result = await picker.pick_element(page)
+            
+            # Close overlay and handle result
+            overlay.close()
             
             if result['success']:
                 selector_field.set_picker_result(result['selector'])
@@ -335,3 +355,12 @@ class ActionsList(ctk.CTkFrame):
                 
         except Exception as e:
             print(f"Error launching element picker: {str(e)}")
+    
+    def cancel_element_picker(self, page, overlay):
+        """Cancel element picker operation"""
+        try:
+            # Disable picker in browser
+            import asyncio
+            asyncio.create_task(page.evaluate("window.elementPicker && window.elementPicker.disable();"))
+        except:
+            pass

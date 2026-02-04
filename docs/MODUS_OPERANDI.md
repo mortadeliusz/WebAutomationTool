@@ -67,3 +67,33 @@ Reject any approach that:
 ---
 
 *This modus operandi applies to all development work regardless of technology stack or project phase. These principles ensure long-term project success and maintainable code quality.*
+
+---
+
+## Documentation Structure Compliance
+
+### **Separation of Concerns in Documentation:**
+- **PROJECT_OVERVIEW.md** - Business concerns only (users, value, requirements)
+- **ARCHITECTURE_DECISIONS.md** - Technical decisions with rationale (ADRs)
+- **IMPLEMENTATION_STATUS.md** - Honest progress assessment
+- **ARCHITECTURE_GUIDE.md** - Technical implementation details
+- **BEHAVIORAL_SPECIFICATION.md** - User requirements and acceptance criteria
+- **TESTING_CHECKLIST.md** - Quality assurance procedures
+
+### **Documentation Quality Standards:**
+- **No mixed concerns** - Each document serves single responsibility
+- **Brutal honesty** - Status documents acknowledge limitations and risks
+- **Decision documentation** - All architectural choices recorded with rationale
+- **Modus operandi references** - All documents reference these principles
+
+### **For New Chat Context:**
+Create saved prompt referencing this modus operandi:
+```
+@prompt modus_operandi
+Always follow the development principles in docs/MODUS_OPERANDI.md:
+- Discussion first, implementation second
+- Architecture-first approach
+- Brutal honesty about limitations
+- No technical debt tolerance
+- Proper separation of concerns
+```

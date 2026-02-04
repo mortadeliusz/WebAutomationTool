@@ -19,6 +19,7 @@
 - **UI Framework:** CustomTkinter with async support (async-tkinter-loop)
 - **Browser Automation:** Playwright (async, multi-browser support)
 - **Data Processing:** Pandas (format-agnostic data handling)
+- **Theme System:** Component-aware theming with JSON configuration
 - **Packaging:** PyInstaller (standalone executable)
 
 ### **Architecture Benefits**
@@ -45,19 +46,18 @@ WebAutomationTool/
 │   ├── pages/
 │   │   ├── workflow_execution.py   # Workflow execution interface
 │   │   ├── workflow_management.py  # Workflow creation and editing
-│   │   ├── subscription.py         # License management
-│   │   ├── test_page.py            # Element picker testing
-│   │   └── browser_test.py         # Browser integration testing
+│   │   └── subscription.py         # License management
 │   └── components/
 │       ├── workflow_list_view.py       # Workflow list with execute buttons
-│       ├── single_page_editor_view.py  # Full workflow editor
-│       ├── wizard_editor_view.py       # Step-by-step wizard editor
+│       ├── workflow_single_page_editor.py  # Full workflow editor
+│       ├── workflow_wizard_editor.py       # Step-by-step wizard editor
 │       ├── two_option_toggle.py        # Generic toggle component
 │       ├── browser_config_section.py   # Browser lifecycle management
 │       ├── actions_list.py             # Inline action editor
 │       ├── data_sample_status.py       # Data sample status indicator
-│       ├── data_table.py               # Data preview component
+│       ├── data_table.py               # Data preview component with wrapper pattern
 │       ├── status_bar.py
+│       ├── menu_item.py                # Navigation menu items
 │       └── fields/
 │           ├── action_value_input.py   # Value field with expression helper
 │           ├── text_input.py
@@ -76,7 +76,8 @@ WebAutomationTool/
 │   │   ├── action_handlers.py      # Action registry + handler functions
 │   │   ├── action_execution.py     # Stateless action execution
 │   │   ├── workflow_executor.py    # Workflow orchestration
-│   │   └── element_picker_toggle.py # Interactive element selection
+│   │   ├── theme_manager.py        # Component-aware theme system
+│   │   └── element_picker.py       # Interactive element selection
 │   └── utils/
 │       ├── state_manager.py        # Navigation and wizard mode state
 │       ├── browser_detector.py     # Cross-platform browser discovery
@@ -152,7 +153,7 @@ App (CTk + AsyncCTk)
 
 ## Core Business Logic Status
 
-### **✅ Production-Ready Modules (12 Modules)**
+### **✅ Production-Ready Modules (13 Modules)**
 All core business logic modules have been extracted and are production-ready:
 
 1. **User Preferences** - JSON-based settings persistence with wizard mode defaults
@@ -167,6 +168,7 @@ All core business logic modules have been extracted and are production-ready:
 10. **Element Picker** - Interactive element selection with toggle-based JavaScript injection
 11. **State Manager** - Navigation and wizard mode state management with hybrid persistence
 12. **App Services** - Session-level data sample service and global resource management
+13. **Theme Manager** - Component-aware theme system with JSON configuration
 
 ### **Major Breakthroughs Achieved**
 
