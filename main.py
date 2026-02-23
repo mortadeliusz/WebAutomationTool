@@ -1,14 +1,34 @@
 import customtkinter as ctk
 import json
+import sys
+import base64
 from async_tkinter_loop.mixins import AsyncCTk
 from src.app_services import initialize_services, cleanup_services
 from src.utils.state_manager import save_session_to_preferences
 from src.core.theme_manager import initialize_app_theme
 from ui.main_layout import MainLayout
 
+
+def parse_user_data():
+    """Parse user data from command line args"""
+    if '--session' in sys.argv:
+        idx = sys.argv.index('--session')
+        if idx + 1 < len(sys.argv):
+            try:
+                decoded = base64.b64decode(sys.argv[idx + 1]).decode()
+                return json.loads(decoded)
+            except:
+                return None
+    return None
+
+
 class App(ctk.CTk, AsyncCTk):
     def __init__(self):
         super().__init__()
+        
+        # Parse user data from launcher
+        self.user_data = parse_user_data() or {}
+        
         self.setup_application()
         self.layout = MainLayout(self)
     
@@ -32,14 +52,15 @@ class App(ctk.CTk, AsyncCTk):
     
     def on_closing(self):
         """Handle application shutdown with proper service cleanup"""
-        # Save session state to preferences
         save_session_to_preferences()
         
-        # Run cleanup (now sync since we have async loop)
         import asyncio
-        asyncio.create_task(cleanup_services())
-        # Destroy the window
-        self.destroy()
+        
+        async def cleanup_and_exit():
+            await cleanup_services()
+            self.destroy()
+        
+        asyncio.create_task(cleanup_and_exit())
 
 if __name__ == "__main__":
     app = App()

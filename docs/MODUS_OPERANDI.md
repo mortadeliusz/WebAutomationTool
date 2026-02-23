@@ -66,4 +66,59 @@ Reject any approach that:
 
 ---
 
+## Definition of Done
+
+### **Feature Completion Checklist:**
+A feature is NOT done until ALL of the following are true:
+
+#### **Code Quality:**
+- [ ] Follows separation of concerns (no mixed HTML/CSS/JS/Logic)
+- [ ] Proper module structure (no single-file solutions)
+- [ ] Clean imports (no global scope pollution)
+- [ ] Dependencies managed via Poetry (no manual pyproject.toml edits)
+- [ ] Passes the "6-month pride test" - maintainable and clear
+
+#### **Error Handling:**
+- [ ] All failure paths handled gracefully
+- [ ] User-facing errors are clear and actionable
+- [ ] Logging implemented for debugging (errors, warnings, key operations)
+- [ ] No silent failures or swallowed exceptions
+
+#### **Testing:**
+- [ ] Core functionality has tests (unit or integration as appropriate)
+- [ ] Edge cases identified and tested
+- [ ] Manual testing completed for user-facing features
+- [ ] No regressions in existing functionality
+
+#### **Documentation:**
+- [ ] Code is self-documenting (clear names, obvious structure)
+- [ ] Complex logic has inline comments explaining "why" not "what"
+- [ ] Module README updated if public API changed
+- [ ] Architecture decisions documented if non-obvious
+
+#### **Security & Performance:**
+- [ ] User inputs validated and sanitized
+- [ ] No hardcoded secrets or credentials
+- [ ] No obvious performance bottlenecks
+- [ ] Resource cleanup (files, connections, memory)
+
+#### **Version Control:**
+- [ ] Atomic, logical commits with clear messages
+- [ ] No debug code, commented-out blocks, or temp files
+- [ ] No secrets, API keys, or sensitive data in commits
+
+#### **Self-Review:**
+- [ ] "Would I approve this in code review?"
+- [ ] "Can someone else maintain this without asking me questions?"
+- [ ] "Does this follow all modus operandi principles?"
+- [ ] "Is this production-ready or just 'working'?"
+
+### **Enforcement:**
+- If ANY checkbox is unchecked, the feature is NOT done
+- "It works on my machine" is NOT done
+- "I'll add tests later" means it's NOT done
+- "Good enough for now" means it's NOT done
+
+---
+
 *This modus operandi applies to all development work regardless of technology stack or project phase. These principles ensure long-term project success and maintainable code quality.*

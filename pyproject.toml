@@ -15,7 +15,9 @@ dependencies = [
     "pyyaml (>=6.0.3,<7.0.0)",
     "eel (>=0.18.2,<0.19.0)",
     "customtkinter (>=5.2.2,<6.0.0)",
-    "async-tkinter-loop (>=0.10.3,<0.11.0)"
+    "async-tkinter-loop (>=0.10.3,<0.11.0)",
+    "keyring (>=25.7.0,<26.0.0)",
+    "requests (>=2.32.5,<3.0.0)"
 ]
 
 
