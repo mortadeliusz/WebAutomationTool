@@ -7,6 +7,7 @@ from typing import Dict, Optional, Any
 from playwright.async_api import async_playwright, Browser, BrowserContext, Page
 
 from src.utils.browser_detector import BrowserDetector
+from src.types import BrowserOperationResult
 
 class BrowserController:
     """Control browser instances using async Playwright with detected browsers"""
@@ -19,7 +20,7 @@ class BrowserController:
         self.pages: Dict[str, Page] = {}
         self.detected_browsers = self.detector.detect_installed_browsers()
     
-    async def start(self) -> Dict[str, Any]:
+    async def start(self) -> BrowserOperationResult:
         """Start Playwright"""
         if not self.playwright:
             try:
@@ -29,7 +30,7 @@ class BrowserController:
                 return {'success': False, 'error': f"Failed to start Playwright: {str(e)}"}
         return {'success': True, 'error': None}
     
-    async def stop(self) -> Dict[str, Any]:
+    async def stop(self) -> BrowserOperationResult:
         """Stop all browsers and Playwright safely"""
         errors = []
         
@@ -74,7 +75,7 @@ class BrowserController:
             'errors': errors
         }
     
-    async def launch_browser(self, browser_type: str, alias: str = "main") -> Dict[str, Any]:
+    async def launch_browser(self, browser_type: str, alias: str = "main") -> BrowserOperationResult:
         """Launch a browser instance"""
         if not self.playwright:
             start_result = await self.start()
@@ -126,7 +127,7 @@ class BrowserController:
                 'error': f"Failed to launch {browser_type}: {str(e)}"
             }
     
-    async def navigate(self, url: str, alias: str = "main") -> Dict[str, Any]:
+    async def navigate(self, url: str, alias: str = "main") -> BrowserOperationResult:
         """Navigate to URL"""
         if alias not in self.pages:
             return {
@@ -234,7 +235,7 @@ class BrowserController:
         except Exception:
             return None
     
-    async def wait_for_navigation(self, alias: str = "main", timeout: int = 30000) -> Dict[str, Any]:
+    async def wait_for_navigation(self, alias: str = "main", timeout: int = 30000) -> BrowserOperationResult:
         """Wait for page navigation - useful when user manually navigates"""
         if alias not in self.pages:
             return {

@@ -5,8 +5,9 @@ Workflow File Utilities - Simple file operations for workflow management
 import json
 import os
 import logging
-from typing import Dict, List, Optional
+from typing import List, Optional
 from datetime import datetime
+from src.types import WorkflowDefinition, WorkflowMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ def ensure_workflows_dir(workflows_dir: str = "user_data/workflows") -> None:
         os.makedirs(workflows_dir)
 
 
-def save_workflow(workflow: Dict, workflows_dir: str = "user_data/workflows") -> bool:
+def save_workflow(workflow: WorkflowDefinition, workflows_dir: str = "user_data/workflows") -> bool:
     """Save workflow to JSON file"""
     try:
         ensure_workflows_dir(workflows_dir)
@@ -48,7 +49,7 @@ def save_workflow(workflow: Dict, workflows_dir: str = "user_data/workflows") ->
         return False
 
 
-def load_workflow(workflow_name: str, workflows_dir: str = "user_data/workflows") -> Optional[Dict]:
+def load_workflow(workflow_name: str, workflows_dir: str = "user_data/workflows") -> Optional[WorkflowDefinition]:
     """Load workflow from JSON file"""
     try:
         filename = _generate_filename(workflow_name)
@@ -73,7 +74,7 @@ def load_workflow(workflow_name: str, workflows_dir: str = "user_data/workflows"
         return None
 
 
-def list_workflows(workflows_dir: str = "user_data/workflows") -> List[Dict]:
+def list_workflows(workflows_dir: str = "user_data/workflows") -> List[WorkflowMetadata]:
     """List all available workflows with metadata"""
     workflows = []
     
@@ -130,7 +131,7 @@ def delete_workflow(workflow_name: str, workflows_dir: str = "user_data/workflow
         return False
 
 
-def create_workflow(name: str, browser_type: str = "chrome", starting_url: str = "") -> Dict:
+def create_workflow(name: str, browser_type: str = "chrome", starting_url: str = "") -> WorkflowDefinition:
     """Create a new workflow with basic structure"""
     return {
         'name': name,
@@ -144,7 +145,7 @@ def create_workflow(name: str, browser_type: str = "chrome", starting_url: str =
     }
 
 
-def _validate_workflow(workflow: Dict) -> bool:
+def _validate_workflow(workflow: WorkflowDefinition) -> bool:
     """Validate workflow structure"""
     try:
         # Required fields
@@ -173,7 +174,7 @@ def _validate_workflow(workflow: Dict) -> bool:
         
         return True
         
-    except Exception:
+    except (KeyError, TypeError, AttributeError):
         return False
 
 

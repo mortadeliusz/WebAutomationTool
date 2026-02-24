@@ -2,12 +2,13 @@
 Action Execution - Pure functions for executing actions
 """
 
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from src.app_services import get_browser_controller
 from src.core.action_handlers import get_action_handler
+from src.types import ActionDefinition, ActionResult
 
 
-async def execute_action(action: Dict, row_data: Dict = None) -> Dict[str, Any]:
+async def execute_action(action: ActionDefinition, row_data: Optional[Dict[str, Any]] = None) -> ActionResult:
     """
     Execute action
     

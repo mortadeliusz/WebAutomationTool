@@ -3,11 +3,11 @@ State management utilities for navigation and workflow selection
 Hybrid approach: Direct preferences for critical state, session state for high-frequency updates
 """
 
-from typing import Optional
+from typing import Optional, Any, Dict
 from src.core.user_preferences import get_user_preference, set_user_preference
 
 # Session state for high-frequency updates (window size, theme, etc.)
-_session_state = {}
+_session_state: Dict[str, Any] = {}
 
 def get_last_visited_page() -> str:
     """Get last visited page with fallback to default"""
@@ -69,22 +69,22 @@ def set_wizard_mode(enabled: bool) -> bool:
     except Exception:
         return False
 
-def get_session_state(key: str, default=None):
+def get_session_state(key: str, default: Optional[Any] = None) -> Optional[Any]:
     """Get session-level state (high-frequency updates)"""
     return _session_state.get(key, default)
 
-def set_session_state(key: str, value):
+def set_session_state(key: str, value: Any) -> None:
     """Set session-level state (persisted on app close)"""
     _session_state[key] = value
 
-def get_state(key: str, default=None):
+def get_state(key: str, default: Optional[Any] = None) -> Optional[Any]:
     """Get any application state with fallback"""
     try:
         return get_user_preference(key, default)
     except Exception:
         return default
 
-def set_state(key: str, value):
+def set_state(key: str, value: Any) -> bool:
     """Set any application state"""
     try:
         set_user_preference(key, value)
@@ -92,7 +92,7 @@ def set_state(key: str, value):
     except Exception:
         return False
 
-def save_session_to_preferences():
+def save_session_to_preferences() -> None:
     """Save session state to preferences on app close"""
     try:
         for key, value in _session_state.items():
@@ -102,7 +102,7 @@ def save_session_to_preferences():
     except Exception:
         pass  # Graceful degradation on save failure
 
-def clear_session_state():
+def clear_session_state() -> None:
     """Clear session state (for testing or reset)"""
     global _session_state
     _session_state = {}

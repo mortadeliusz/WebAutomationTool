@@ -68,3 +68,8 @@ def get_component_colors(component_name: str):
     """Get color definitions for a custom component"""
     theme_colors = load_custom_theme_colors()
     return theme_colors.get(component_name, {})
+
+def get_button_colors() -> dict:
+    """Get CTkButton color definitions from theme"""
+    theme_colors = load_custom_theme_colors()
+    return theme_colors.get("CTkButton", {})

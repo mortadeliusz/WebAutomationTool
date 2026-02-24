@@ -1,0 +1,62 @@
+2026-02-24 14:40:26,340 - __main__ - INFO - Application starting
+2026-02-24 14:40:26,375 - src.app_services - INFO - Browser controller initialized
+2026-02-24 14:40:26,378 - __main__ - INFO - Services initialized
+2026-02-24 14:40:29,137 - __main__ - INFO - Application initialized successfully
+2026-02-24 14:40:40,189 - __main__ - INFO - Application shutting down
+2026-02-24 14:40:40,192 - src.app_services - INFO - Browser controller cleaned up successfully
+2026-02-24 16:28:50,244 - __main__ - INFO - Application starting
+2026-02-24 16:28:50,280 - src.app_services - INFO - Browser controller initialized
+2026-02-24 16:28:50,288 - __main__ - INFO - Services initialized
+2026-02-24 16:28:52,207 - __main__ - INFO - Application initialized successfully
+2026-02-24 16:29:18,018 - ui.components.top_bar - INFO - User logout initiated
+2026-02-24 16:29:18,385 - ui.components.top_bar - INFO - Opened logout URL: http://localhost:8000/ui/auth/logout.html
+2026-02-24 16:29:18,385 - __main__ - INFO - Application shutting down
+2026-02-24 16:29:18,410 - src.app_services - INFO - Browser controller cleaned up successfully
+2026-02-24 16:30:24,304 - __main__ - INFO - Application starting
+2026-02-24 16:30:24,329 - src.app_services - INFO - Browser controller initialized
+2026-02-24 16:30:24,331 - __main__ - INFO - Services initialized
+2026-02-24 16:30:27,152 - __main__ - INFO - Application initialized successfully
+2026-02-24 16:30:35,839 - __main__ - INFO - Application shutting down
+2026-02-24 16:30:35,840 - src.app_services - INFO - Browser controller cleaned up successfully
+2026-02-24 16:30:56,309 - __main__ - INFO - Application starting
+2026-02-24 16:30:56,321 - src.app_services - INFO - Browser controller initialized
+2026-02-24 16:30:56,322 - __main__ - INFO - Services initialized
+2026-02-24 16:30:57,653 - __main__ - INFO - Application initialized successfully
+2026-02-24 16:31:12,478 - __main__ - INFO - Application shutting down
+2026-02-24 16:31:12,479 - src.app_services - INFO - Browser controller cleaned up successfully
+2026-02-24 16:42:40,832 - __main__ - INFO - Application starting
+2026-02-24 16:42:40,847 - src.app_services - INFO - Browser controller initialized
+2026-02-24 16:42:40,848 - __main__ - INFO - Services initialized
+2026-02-24 16:42:44,165 - __main__ - INFO - Application initialized successfully
+2026-02-24 16:43:31,812 - __main__ - INFO - Application shutting down
+2026-02-24 16:43:31,816 - src.app_services - INFO - Browser controller cleaned up successfully
+2026-02-24 16:56:34,316 - __main__ - INFO - Application starting
+2026-02-24 16:56:34,333 - src.app_services - INFO - Browser controller initialized
+2026-02-24 16:56:34,337 - __main__ - INFO - Services initialized
+2026-02-24 16:56:35,504 - __main__ - INFO - Application initialized successfully
+2026-02-24 16:56:52,559 - __main__ - INFO - Application shutting down
+2026-02-24 16:56:52,568 - src.app_services - INFO - Browser controller cleaned up successfully
+2026-02-24 16:57:27,348 - __main__ - INFO - Application starting
+2026-02-24 16:57:27,420 - src.app_services - INFO - Browser controller initialized
+2026-02-24 16:57:27,423 - __main__ - INFO - Services initialized
+2026-02-24 16:57:29,595 - __main__ - INFO - Application initialized successfully
+2026-02-24 16:57:40,006 - __main__ - INFO - Application shutting down
+2026-02-24 16:57:40,010 - src.app_services - INFO - Browser controller cleaned up successfully
+2026-02-24 17:17:58,015 - __main__ - INFO - Application starting
+2026-02-24 17:17:58,033 - src.app_services - INFO - Browser controller initialized
+2026-02-24 17:17:58,034 - __main__ - INFO - Services initialized
+2026-02-24 17:17:59,054 - __main__ - INFO - Application initialized successfully
+2026-02-24 17:18:06,384 - __main__ - INFO - Application shutting down
+2026-02-24 17:18:06,388 - src.app_services - INFO - Browser controller cleaned up successfully
+2026-02-24 21:29:28,495 - __main__ - INFO - Application starting
+2026-02-24 21:29:28,524 - src.app_services - INFO - Browser controller initialized
+2026-02-24 21:29:28,526 - __main__ - INFO - Services initialized
+2026-02-24 21:29:30,168 - __main__ - INFO - Application initialized successfully
+2026-02-24 21:30:03,423 - __main__ - INFO - Application shutting down
+2026-02-24 21:30:03,432 - src.app_services - INFO - Browser controller cleaned up successfully
+2026-02-24 21:31:42,534 - __main__ - INFO - Application starting
+2026-02-24 21:31:42,552 - src.app_services - INFO - Browser controller initialized
+2026-02-24 21:31:42,552 - __main__ - INFO - Services initialized
+2026-02-24 21:31:43,503 - __main__ - INFO - Application initialized successfully
+2026-02-24 21:31:58,977 - __main__ - INFO - Application shutting down
+2026-02-24 21:31:58,983 - src.app_services - INFO - Browser controller cleaned up successfully

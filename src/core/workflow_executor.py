@@ -3,15 +3,19 @@ Workflow Executor - Orchestrate workflow execution with data iteration
 """
 
 import pandas as pd
+import logging
 from typing import Dict, List, Any
 from src.core.action_execution import execute_action
 from src.app_services import get_browser_controller
+from src.types import WorkflowDefinition, WorkflowExecutionResult
+
+logger = logging.getLogger(__name__)
 
 
 class WorkflowExecutor:
     """Orchestrate workflow execution across data rows"""
     
-    async def execute_workflow(self, workflow_def: Dict, data: pd.DataFrame) -> Dict[str, Any]:
+    async def execute_workflow(self, workflow_def: WorkflowDefinition, data: pd.DataFrame) -> WorkflowExecutionResult:
         """
         Execute workflow for all data rows
         
@@ -28,6 +32,9 @@ class WorkflowExecutor:
                 'results': List[Dict]
             }
         """
+        workflow_name = workflow_def.get('name', 'Unknown')
+        logger.info(f"Starting workflow execution: {workflow_name} with {len(data)} rows")
+        
         results = []
         successful_rows = 0
         failed_rows = 0
@@ -36,6 +43,7 @@ class WorkflowExecutor:
         browsers = workflow_def.get('browsers', {})
         
         if not actions:
+            logger.error(f"Workflow {workflow_name} has no actions")
             return {
                 'success': False,
                 'error': 'No actions in workflow',
@@ -46,6 +54,7 @@ class WorkflowExecutor:
             }
         
         if not browsers:
+            logger.error(f"Workflow {workflow_name} has no browsers configured")
             return {
                 'success': False,
                 'error': 'No browsers configured in workflow',
@@ -96,6 +105,8 @@ class WorkflowExecutor:
                 'success': row_success,
                 'actions': row_results
             })
+        
+        logger.info(f"Workflow {workflow_name} completed: {successful_rows}/{len(data)} successful, {failed_rows} failed")
         
         return {
             'success': True,
