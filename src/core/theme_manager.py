@@ -54,7 +54,11 @@ def load_custom_theme_colors():
     global _custom_theme_colors
     if _custom_theme_colors is None:
         try:
-            theme_file = Path("config/custom_theme.json")
+            # Read theme path from config.json
+            with open('config.json', 'r') as f:
+                config = json.load(f)
+            theme_file = Path(config.get('color_theme', 'config/custom_theme.json'))
+            
             if theme_file.exists():
                 with open(theme_file, 'r') as f:
                     _custom_theme_colors = json.load(f)
@@ -73,3 +77,27 @@ def get_button_colors() -> dict:
     """Get CTkButton color definitions from theme"""
     theme_colors = load_custom_theme_colors()
     return theme_colors.get("CTkButton", {})
+
+def get_color(key: str, fallback: str | tuple = "transparent") -> str | tuple:
+    """Get semantic color from theme by dot-notation key"""
+    theme_colors = load_custom_theme_colors()
+    semantic = theme_colors.get("SemanticColors", {})
+    
+    keys = key.split(".")
+    value = semantic
+    for k in keys:
+        if isinstance(value, dict):
+            value = value.get(k)
+        else:
+            return fallback
+    
+    return value if value is not None else fallback
+
+def get_text_color(variant: str = "primary") -> tuple:
+    """Get adaptive text color tuple from theme"""
+    color = get_color(f"text.{variant}")
+    return tuple(color) if isinstance(color, list) else ("gray14", "gray84")
+
+def get_bg_color(variant: str = "transparent") -> str | tuple:
+    """Get adaptive background color from theme"""
+    return get_color(f"background.{variant}")

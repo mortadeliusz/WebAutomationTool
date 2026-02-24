@@ -42,36 +42,44 @@ WebAutomationTool/
 │   ├── pages/                      # Application pages
 │   │   ├── workflow_execution.py
 │   │   ├── workflow_management.py
-│   │   ├── subscription.py
-│   │   ├── test_page.py
-│   │   └── browser_test.py
+│   │   └── subscription.py
 │   └── components/                 # Reusable UI components
 │       ├── workflow_list_view.py
-│       ├── workflow_editor_view.py
-│       ├── browser_config_section.py  # Browser lifecycle management
-│       ├── data_sample_status.py   # Data sample status indicator
-│       ├── actions_list.py         # Inline action editor
+│       ├── workflow_single_page_editor.py  # Full workflow editor
+│       ├── workflow_wizard_editor.py       # Step-by-step wizard editor
+│       ├── two_option_toggle.py            # Generic toggle component
+│       ├── browser_config_section.py      # Browser lifecycle management
+│       ├── data_sample_status.py          # Data sample status indicator
+│       ├── actions_list.py                # Inline action editor
+│       ├── action_overlay.py              # Full-app blocking overlay
 │       ├── status_bar.py
-│       └── fields/                 # Field component library
-│           ├── action_value_input.py    # Value with expression helper
-│           ├── text_input.py            # Generic text input
-│           ├── dropdown.py              # Generic dropdown
-│           ├── selector_picker.py       # Selector with element picker
-│           ├── key_picker.py            # Key capture with 🎹 button
-│           ├── number_input.py          # Numeric input with validation
+│       ├── menu_item.py                   # Navigation menu items
+│       ├── data_table.py               # Data preview component with wrapper pattern
+│       ├── status_bar.py                  # Application status display
+│       └── fields/                        # Field component library
+│           ├── action_value_input.py      # Value with expression helper
+│           ├── text_input.py              # Generic text input
+│           ├── dropdown.py                # Generic dropdown
+│           ├── selector_picker.py         # Selector with element picker
+│           ├── key_picker.py              # Key capture with 🎹 button
+│           ├── number_input.py            # Numeric input with validation
 │           └── data_expression_helper.py  # Column selector utility
 ├── src/                            # Business logic only
 │   ├── app_services.py             # Global service management
 │   ├── core/                       # Core automation modules
-│   │   ├── action_handlers.py      # Action registry + handler functions
 │   │   ├── action_execution.py     # Stateless action execution
+│   │   ├── action_handlers.py      # Action registry + handler functions
 │   │   ├── browser_controller.py   # Browser lifecycle management
-│   │   ├── workflow_executor.py    # Workflow orchestration
+│   │   ├── data_loader.py          # Multi-format data loading
+│   │   ├── element_picker.py       # Interactive element selection
 │   │   ├── template_processing.py  # Template resolution utility
-│   │   └── element_picker_toggle.py
+│   │   ├── theme_manager.py        # Theme system with component-specific colors
+│   │   ├── user_preferences.py     # Settings persistence
+│   │   └── workflow_executor.py    # Workflow orchestration
 │   └── utils/                      # Utility functions
 │       ├── workflow_files.py
-│       └── browser_detector.py
+│       ├── browser_detector.py
+│       └── state_manager.py        # Navigation and state management
 ├── user_data/                      # User-created content
 │   ├── workflows/                  # User workflow definitions
 │   ├── preferences/                # User settings
@@ -110,12 +118,12 @@ def save_action(self):
     # Trigger immediate persistence
     self.on_actions_changed(self.actions)
 
-# WorkflowEditorView.on_actions_changed() - Auto-save workflow
+# WorkflowSinglePageEditor.on_actions_changed() - Auto-save workflow
 def on_actions_changed(self, actions: List[Dict]):
     self.current_workflow['actions'] = actions
     save_workflow(self.current_workflow)  # Immediate disk save
 
-# WorkflowEditorView.save_workflow() - Workflow-level save
+# WorkflowSinglePageEditor.save_workflow() - Workflow-level save
 def save_workflow(self):
     self.current_workflow['name'] = self.name_entry.get()
     save_workflow(self.current_workflow)  # Save complete workflow
@@ -292,7 +300,69 @@ class SubscriptionPage(ctk.CTkFrame):
 
 ---
 
-## Application Bootstrap Architecture
+## Theme Management Architecture
+
+### **Component-Aware Theme System**
+
+**Problem Solved:** Consistent theming across all UI components with customizable color schemes
+
+**Solution:** Centralized theme manager with component-specific color definitions
+
+```python
+# src/core/theme_manager.py - Theme system
+def initialize_app_theme(app):
+    """Initialize theme system with CustomTkinter"""
+    theme_name = get_user_preference("theme", "dark")
+    ctk.set_appearance_mode(theme_name)
+    
+    # Load custom theme colors
+    load_custom_theme_colors()
+
+def get_component_colors(component_name: str) -> dict:
+    """Get theme-specific colors for component"""
+    return COMPONENT_COLORS.get(component_name, {})
+
+def switch_theme(theme_name: str):
+    """Switch theme and update session state"""
+    ctk.set_appearance_mode(theme_name)
+    set_session_state("pref_theme", theme_name)
+```
+
+**Component Integration:**
+```python
+# ui/components/menu_item.py - Theme-aware component
+class MenuItem(ctk.CTkLabel):
+    def __init__(self, parent, text: str, on_click=None):
+        self.colors = get_component_colors("MenuItemLabel")
+        super().__init__(parent, text=text, cursor="hand2")
+        
+    def set_current(self, is_current: bool):
+        if is_current:
+            self.configure(fg_color=self.colors.get("selected_bg", ["gray80", "gray25"]))
+```
+
+**Theme Configuration:**
+```json
+// config/custom_theme.json
+{
+  "MenuItemLabel": {
+    "hover_bg": ["gray85", "gray20"],
+    "selected_bg": ["gray80", "gray25"],
+    "default_bg": "transparent"
+  }
+}
+```
+
+**Benefits:**
+- ✅ **Consistent theming** - All components use same color system
+- ✅ **Easy customization** - JSON configuration for colors
+- ✅ **Component-specific** - Each component gets appropriate colors
+- ✅ **Session persistence** - Theme choice remembered
+- ✅ **Live switching** - Theme toggle updates immediately
+
+---
+
+
 
 ### **Clean Separation Pattern**
 
@@ -1302,7 +1372,7 @@ class WorkflowManagementPage(ctk.CTkFrame):
         self.list_view.grid(row=0, column=0, sticky="nsew")
         
         # Editor view
-        self.editor_view = WorkflowEditorView(self, on_save=self.on_save, on_cancel=self.show_list)
+        self.editor_view = WorkflowSinglePageEditor(self, on_save=self.on_save, on_cancel=self.show_list)
         self.editor_view.grid(row=0, column=0, sticky="nsew")
         self.editor_view.grid_remove()
     
@@ -2104,12 +2174,9 @@ class PageController:
 # ui/navigation/sidebar.py - Future-proof highlighting
 class SideNav(ctk.CTkFrame):
     def update_highlighting(self, current_page: str) -> None:
-        """Update menu button highlighting for current page"""
-        for page_name, button in self.menu_buttons.items():
-            if page_name == current_page:
-                button.configure(fg_color="#1f538d")  # Highlighted background
-            else:
-                button.configure(fg_color="transparent")  # Normal
+        """Update menu item highlighting for current page"""
+        for page_name, menu_item in self.menu_items.items():
+            menu_item.set_current(page_name == current_page)
 ```
 
 **Design Rationale:**
@@ -2376,3 +2443,512 @@ def save_session_to_preferences():
 ---
 
 *This enhanced navigation architecture provides intelligent state management while maintaining clean separation of concerns. The hybrid state approach optimizes performance while ensuring critical navigation context is never lost, creating a seamless user experience that scales with application growth.*
+
+---
+
+## ActionOverlay Architecture
+
+### **Full-App Blocking Overlay Pattern**
+
+**Problem Solved:** Users need clear guidance during blocking operations (element picker, key capture) without platform dependencies or visual confusion
+
+**Solution:** Reusable full-app overlay component using CTkFrame with place() geometry
+
+### **Component Design**
+
+**ActionOverlay** - Cross-platform blocking overlay with callback pattern
+
+```python
+# ui/components/action_overlay.py
+class ActionOverlay(ctk.CTkFrame):
+    """Full app overlay for blocking operations with cancel support"""
+    
+    def __init__(self, parent, title: str, message: str, on_cancel: Callable):
+        super().__init__(parent)  # Uses theme colors naturally
+        self.on_cancel = on_cancel
+        self.setup_ui(title, message)
+        self.show()
+    
+    def show(self):
+        """Show overlay covering entire app"""
+        self.place(x=0, y=0, relwidth=1, relheight=1)
+        self.lift()  # Ensure it's on top
+    
+    def close(self):
+        """Remove overlay"""
+        self.place_forget()
+        self.destroy()
+```
+
+**Key Features:**
+- **Full app coverage** - Overlay covers entire application window
+- **Natural blocking** - CTkFrame absorbs all mouse/keyboard events
+- **Theme compliant** - Uses app's existing color scheme
+- **Callback pattern** - Clean separation of concerns
+- **Cross-platform** - No OS-specific dependencies
+
+### **Integration Pattern**
+
+**Element Picker Integration:**
+```python
+# ui/components/actions_list.py - Element picker with overlay
+@async_handler
+async def on_element_picker_clicked(self, selector_field):
+    # Show overlay with instructions
+    overlay = ActionOverlay(
+        parent=self.winfo_toplevel(),
+        title="🎯 Element Picker Active",
+        message="Go to your browser and click the element\nyou want to select.",
+        on_cancel=lambda: self.cancel_element_picker(page, overlay)
+    )
+    
+    # Launch picker (overlay blocks UI during operation)
+    result = await picker.pick_element(page)
+    overlay.close()  # Remove overlay when done
+```
+
+**Key Capture Integration:**
+```python
+# ui/components/fields/key_picker.py - Key capture with overlay
+def start_key_capture(self):
+    self.overlay = ActionOverlay(
+        parent=self.winfo_toplevel(),
+        title="🎹 Key Capture Active",
+        message="Press the key you want to use\nfor this action.",
+        on_cancel=self.cancel_key_capture
+    )
+    # Start key listening...
+```
+
+### **Design Benefits**
+
+**User Experience:**
+- ✅ **Clear guidance** - User knows exactly what action is required
+- ✅ **Visual blocking** - Obviously prevents other interactions
+- ✅ **Cancellation support** - User can abort operation cleanly
+- ✅ **Context preservation** - Can see blocked content underneath
+
+**Architecture:**
+- ✅ **Reusable component** - Same overlay for different blocking operations
+- ✅ **Clean separation** - UI component separate from business logic
+- ✅ **Callback pattern** - Caller controls cleanup and error handling
+- ✅ **Zero dependencies** - No external libraries required
+
+**Cross-Platform:**
+- ✅ **No OS-specific code** - Works identically on Windows/macOS/Linux
+- ✅ **No transparency dependencies** - Avoids platform-specific libraries
+- ✅ **Theme integration** - Respects user's light/dark mode preference
+
+### **Usage Examples**
+
+**Element Picker Instructions:**
+```
+🎯 Element Picker Active
+
+Go to your browser and click the element
+you want to select.
+
+The element will be highlighted as you hover.
+
+[Cancel]
+```
+
+**Key Capture Instructions:**
+```
+🎹 Key Capture Active
+
+Press the key you want to use
+for this action.
+
+Examples: Enter, Tab, Escape, Space
+
+[Cancel]
+```
+
+### **Modus Operandi Compliance**
+
+**✅ Architecture-first approach** - Discussed alternatives before implementation
+**✅ Cross-platform compatibility** - No platform-specific dependencies
+**✅ Clean separation of concerns** - UI component with callback pattern
+**✅ Zero technical debt** - No shortcuts or compromises
+**✅ Future maintainability** - Easy to extend for new blocking operations
+
+---
+
+## DataTable Wrapper Architecture
+
+### **Component-Specific TTK Styling with Wrapper Pattern**
+
+**Problem Solved:** Need for both pure table widget and user-friendly placeholder management
+
+**Solution:** Wrapper pattern with internal TTK component and public interface
+
+**Architecture:**
+```
+DataTable (Public API - CTkFrame)
+└── _TreeviewTable (Internal - CTkBaseClass)
+    └── ttk.Treeview (Component-specific styling)
+```
+
+**Implementation:**
+```python
+# Internal TTK component with theme integration
+class _TreeviewTable(ctk.CTkBaseClass):
+    """Internal TTK Treeview component - pure table widget, no placeholder"""
+    
+    def _apply_class_theme(self):
+        # Component-specific TTK styling with default theme foundation
+        style = ttk.Style()
+        style.theme_use("default")  # Foundation for custom styles
+        
+        style.configure("DataTable.Treeview", ...)
+        style.configure("DataTable.Treeview.Heading", ...)
+
+# Public wrapper with placeholder support
+class DataTable(ctk.CTkFrame):
+    """Public DataTable component with placeholder support"""
+    
+    def __init__(self, parent, **kwargs):
+        self.table = _TreeviewTable(self, **kwargs)
+        self.placeholder_label = ctk.CTkLabel(self, text="No data to display")
+    
+    def set_data(self, dataframe):
+        if dataframe is None or dataframe.empty:
+            self._show_placeholder()
+        else:
+            self._show_table()
+            self.table.set_data(dataframe)
+```
+
+**Benefits:**
+- ✅ **Clean separation** - Placeholder logic separate from table logic
+- ✅ **Component-specific styling** - Isolated TTK theming prevents conflicts
+- ✅ **Reusable core** - `_TreeviewTable` can be used elsewhere if needed
+- ✅ **Theme integration** - Proper CustomTkinter theme manager integration
+- ✅ **External control** - Parent decides placeholder vs table display
+
+**TTK Styling Features:**
+- **Default theme foundation** - `style.theme_use("default")` enables custom style names
+- **Component isolation** - `"DataTable.Treeview"` prevents conflicts with other Treeview widgets
+- **Class-level theme tracking** - Efficient theme application across instances
+- **JSON theme integration** - Colors from `config/custom_theme.json`
+- **Tuple color support** - Light/dark mode color resolution
+
+
+---
+
+## Element Picker Implementation
+
+### **Smart Selector Generation with Uniqueness Verification**
+
+**Problem Solved:** Generate reliable, maintainable selectors for web elements without requiring users to write XPath or CSS selectors manually
+
+**Solution:** Priority-based selector generation with context-aware filtering and parent context refinement
+
+---
+
+### **Selector Priority Order**
+
+**Strategy:** Test candidates in order of stability until unique selector found
+
+1. **[data-testid='...']** - Test IDs (most stable, explicitly for testing)
+2. **[aria-label='...']** - Accessibility labels (semantic, stable)
+3. **img[alt='...']** - Image alt text (accessibility requirement)
+4. **#id** - Element IDs (filtered for dynamic generation)
+5. **[name='...']** - Name attributes (filtered for dynamic generation)
+6. **a[href='/path']** - Link destinations (path only, query params stripped)
+7. **[placeholder='...']** - Placeholder text (user-facing)
+8. **//*[@role='...' and contains(., '...')]** - Role + text (XPath)
+9. **//tag[contains(., '...')]** - Full text match (XPath)
+10. **Parent context refinement** - Add semantic parent if not unique
+11. **Position-based XPath** - Last resort fallback
+
+**CSS-First Approach:**
+- Priorities 1-7 use CSS selectors (faster, more readable)
+- Priorities 8-9 use XPath (only way to match text content)
+- Position-based XPath only as last resort
+
+---
+
+### **Context-Aware Dynamic Generation Detection**
+
+**Purpose:** Filter out framework-generated or no-code tool-generated attributes that change on rebuild
+
+**Design Decision:** Whitelist semantic patterns instead of blacklisting random patterns
+
+**Rationale:**
+- **Impossible to blacklist all random formats** - Infinite variations exist
+- **Whitelist is maintainable** - Common naming conventions are finite
+- **Fail open, not closed** - Accept unknown formats, let uniqueness test decide
+- **False negative > False positive** - Rejecting good selector worse than accepting questionable one
+
+**Implementation:**
+
+```python
+def _is_generated(self, value: str, context: str = 'generic') -> bool:
+    """Check if attribute looks dynamically generated"""
+    
+    # Pass-through contexts (never filtered)
+    if context in ['href', 'text', 'aria-label', 'alt', 'placeholder']:
+        return False  # User-facing or semantic by nature
+    
+    # Pattern check for code identifiers (id, name, testid)
+    SEMANTIC_PATTERNS = [
+        r'^[a-z]+$',                              # lowercase: "header"
+        r'^[A-Z]+$',                              # UPPERCASE: "OK"
+        r'^[a-z]+-[a-z]+(-[a-z]+)*$',            # kebab-case: "user-profile"
+        r'^[a-z]+[A-Z][a-z]*([A-Z][a-z]*)*$',    # camelCase: "userName"
+        r'^[a-z]+_[a-z]+(_[a-z]+)*$',            # snake_case: "user_name"
+        r'^[A-Z][a-z]+([A-Z][a-z]*)*$',          # PascalCase: "UserName"
+        r'^\d+$',                                 # Numbers: "1", "123"
+    ]
+    
+    return not any(re.match(pattern + '$', value) for pattern in SEMANTIC_PATTERNS)
+```
+
+**Pass-Through Contexts:**
+- `href` - Paths are semantic (e.g., `/made-in-webflow/animation`)
+- `text` - Visible content is always meaningful
+- `aria-label` - Accessibility requirement (human-written)
+- `alt` - Accessibility requirement (human-written)
+- `placeholder` - User-facing text
+
+**Pattern-Checked Contexts:**
+- `id` - Can be framework-generated (`react-id-47`)
+- `name` - Can be no-code tool generated (`field_1234567`)
+- `testid` - Unlikely but possible to be generated
+
+**Examples:**
+- `id="user-profile"` ✅ Accepted (kebab-case)
+- `id="react-id-47"` ❌ Rejected (doesn't match patterns)
+- `href="/made-in-webflow/animation"` ✅ Accepted (pass-through)
+- `text="Save/Update"` ✅ Accepted (pass-through)
+
+---
+
+### **Parent Context Refinement**
+
+**When Applied:** Base selector matches multiple elements
+
+**Strategy:** Climb parent tree to add semantic context
+
+**Parent Climbing Algorithm:**
+
+```javascript
+// Extract parent chain up to body/html (max 100 iterations safety net)
+const parents = [];
+let current = el.parentElement;
+let iterations = 0;
+
+while (current && iterations < 100) {
+    if (current.tagName === 'BODY' || current.tagName === 'HTML') {
+        break;  // Semantic boundary
+    }
+    
+    parents.push({
+        tag: current.tagName.toLowerCase(),
+        id: current.id,
+        classes: Array.from(current.classList)
+    });
+    
+    current = current.parentElement;
+    iterations++;
+}
+```
+
+**Parent Priority:**
+
+**1. Semantic parent tags:**
+```python
+if parent['tag'] in ['nav', 'header', 'main', 'aside', 'footer', 'form', 'article', 'section']:
+    selector = f"//{parent['tag']}{base_selector}"
+    if count == 1: return selector
+```
+
+**2. Parent with stable ID:**
+```python
+if parent['id'] and not self._is_generated(parent['id'], 'id'):
+    selector = f"//*[@id='{parent['id']}']{base_selector}"
+    if count == 1: return selector
+```
+
+**Limitations:**
+- When multiple identical elements exist in same semantic container, parent context cannot differentiate
+- Position-based fallback is the correct solution in this case
+
+---
+
+### **Href Attribute Processing**
+
+**Strategy:** Use link destination path, strip unstable parts
+
+**Processing:**
+```python
+href = element_info['href']
+# Strip query params and hash
+href = href.split('?')[0].split('#')[0]
+# Extract path if full URL
+if href.startswith('http'):
+    from urllib.parse import urlparse
+    href = urlparse(href).path
+```
+
+**Examples:**
+- `https://example.com/page?id=123#section` → `/page`
+- `/contact` → `/contact`
+- `../about` → `../about`
+
+**Rationale:**
+- Query params often contain session IDs or timestamps (unstable)
+- Hash fragments are client-side navigation (not part of destination)
+- Paths are semantic and stable
+
+---
+
+### **Text Matching Implementation**
+
+**Full Text Usage:**
+- Uses complete `innerText` (no truncation)
+- Includes all nested element text
+- Short text ("OK", "1", "A") accepted - uniqueness test decides
+
+**XPath Text Matching:**
+```xpath
+//a[contains(., 'Animation')]  ✅ Matches nested text (uses .)
+//a[contains(text(), 'Animation')]  ❌ Misses nested text (direct text only)
+```
+
+**Why `.` instead of `text()`:**
+- `.` matches current node + all descendants
+- `text()` only matches direct text nodes
+- Nested text is common in modern web apps
+
+---
+
+### **String Escaping**
+
+**XPath String Escaping:**
+
+**Challenge:** XPath strings can contain quotes that break syntax
+
+**Solution:**
+```python
+def _escape_xpath_string(self, text: str) -> str:
+    if '"' not in text and "'" not in text:
+        return f'"{text}"'  # Simple case
+    
+    if '"' in text and "'" not in text:
+        return f"'{text}'"  # Use single quotes
+    
+    if "'" in text and '"' not in text:
+        return f'"{text}"'  # Use double quotes
+    
+    # Both quotes present - use concat()
+    # Build: concat("part1", '"', "part2")
+```
+
+**Examples:**
+- `"Save"` → `"Save"`
+- `"Don't"` → `"Don't"`
+- `'Say "hi"'` → `'Say "hi"'`
+- `"It's \"quoted\""` → `concat("It's ", '"', "quoted", '"')`
+
+**CSS String Escaping:**
+```python
+def _escape_css_string(self, text: str) -> str:
+    # Escape backslashes and quotes
+    text = text.replace('\\', '\\\\').replace('"', '\\"')
+    return f'"{text}"'
+```
+
+---
+
+### **Design Decisions**
+
+**No Arbitrary Limits:**
+- ❌ No text truncation - use full innerText
+- ❌ No "max 5 parent levels" - climb to semantic boundary
+- ✅ Stop at `<body>/<html>` - semantic boundary
+- ✅ Max 100 iterations - safety net for infinite loops
+
+**Quality Over Speed:**
+- User accepts 1-5s generation time
+- Reliable selector > fast generation
+- One-time cost (picking) vs repeated execution cost (playback)
+
+**Fail Open, Not Closed:**
+- Pass-through for user-facing text
+- Only filter code identifiers
+- False positive (accepting bad selector) < False negative (rejecting good selector)
+- Uniqueness test is the safety net
+
+**Position-Based Fallback is Correct:**
+
+When DOM lacks stable identifiers:
+- No test IDs
+- No ARIA labels
+- Duplicate text in same container
+- Auto-generated classes
+
+**Position-based XPath is the industry-standard solution**, not a failure.
+
+---
+
+### **Code Structure**
+
+```
+ElementPicker
+├── pick_element()                    # Main entry point
+├── generate_smart_selector()         # Priority-based generation
+├── _try_parent_context()             # Parent climbing logic
+├── _generate_xpath_fallback()        # Position-based fallback
+├── _is_generated()                   # Context-aware generation filter
+├── _escape_xpath_string()            # XPath quote escaping
+└── _escape_css_string()              # CSS quote escaping
+```
+
+---
+
+### **Integration with Action Editing**
+
+**Seamless Picker Integration:**
+
+```python
+# ui/components/actions_list.py - Element picker integration
+@async_handler
+async def on_element_picker_clicked(self, selector_field):
+    browser_controller = get_browser_controller()
+    page = browser_controller.get_existing_page("main")
+    
+    picker = ElementPicker()
+    result = await picker.pick_element(page)
+    
+    if result['success']:
+        selector_field.set_picker_result(result['selector'])
+```
+
+**User Flow:**
+```
+User clicks 🎯 → SelectorPickerField → ActionsList.on_element_picker_clicked()
+→ Get browser page → Launch ElementPicker → Set result in field
+```
+
+**Benefits:**
+- ✅ **Seamless integration** - Picker works directly from action editor
+- ✅ **No modal blocking** - Async operations execute immediately
+- ✅ **Context aware** - Uses browser from action's browser_alias
+- ✅ **User friendly** - Results appear directly in selector field
+
+---
+
+### **Modus Operandi Compliance**
+
+**✅ Architecture-first approach** - Discussed alternatives before implementation  
+**✅ Best practices validation** - Industry-standard selector strategies  
+**✅ Technical debt assessment** - Zero debt, clean implementation  
+**✅ Future maintainability** - Easy to extend priority list  
+**✅ Design decision documentation** - Rationale for whitelist vs blacklist approach
+
+---
+
+*This implementation provides reliable selector generation while maintaining clean architecture and following industry best practices. The context-aware filtering and parent refinement strategies handle real-world web applications effectively.*

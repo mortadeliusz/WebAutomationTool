@@ -5,7 +5,7 @@ Side Navigation - Clean navigation component using PageController
 import customtkinter as ctk
 from ui.navigation.controller import PageController
 from ui.navigation.registry import get_pages
-from ui.components.menu_item_label import MenuItemLabel
+from ui.components.menu_item import MenuItem
 
 
 class SideNav(ctk.CTkFrame):
@@ -26,7 +26,7 @@ class SideNav(ctk.CTkFrame):
             name = page_config["name"]
             menu_text = page_config["menu_text"]
             
-            menu_item = MenuItemLabel(
+            menu_item = MenuItem(
                 self,
                 text=menu_text,
                 on_click=lambda n=name: self.navigate_to(n)

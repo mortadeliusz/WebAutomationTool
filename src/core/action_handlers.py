@@ -6,6 +6,7 @@ import asyncio
 from typing import Dict, Callable, Any
 from playwright.async_api import Page
 from src.core.template_processing import resolve_expression
+from src.utils.url_helper import normalize_and_navigate
 
 
 async def handle_click(action: Dict, page: Page, row_data: Dict = None) -> Dict[str, Any]:
@@ -46,7 +47,7 @@ async def handle_fill_field(action: Dict, page: Page, row_data: Dict = None) -> 
 
 
 async def handle_navigate(action: Dict, page: Page, row_data: Dict = None) -> Dict[str, Any]:
-    """Handle navigate action"""
+    """Handle navigate action with HTTPS->HTTP fallback"""
     url = action.get('url', '')
     if not url:
         return {'success': False, 'error': 'No URL specified'}
@@ -55,11 +56,7 @@ async def handle_navigate(action: Dict, page: Page, row_data: Dict = None) -> Di
     if row_data:
         url = resolve_expression(url, row_data)
     
-    try:
-        await page.goto(url, timeout=30000)
-        return {'success': True, 'error': None}
-    except Exception as e:
-        return {'success': False, 'error': f'Navigation error: {str(e)}'}
+    return await normalize_and_navigate(page, url)
 
 
 async def handle_type_text(action: Dict, page: Page, row_data: Dict = None) -> Dict[str, Any]:

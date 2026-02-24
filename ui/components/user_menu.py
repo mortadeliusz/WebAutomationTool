@@ -6,7 +6,7 @@ import customtkinter as ctk
 import logging
 from typing import Callable, Optional
 from src.utils.state_manager import get_session_state
-from src.core.theme_manager import get_current_theme_default
+from src.core.theme_manager import get_current_theme_default, get_text_color, get_bg_color, get_color
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +64,7 @@ class UserMenu(ctk.CTkToplevel):
         )
         
         # Separator
-        separator = ctk.CTkFrame(menu_frame, height=1, fg_color="gray40")
+        separator = ctk.CTkFrame(menu_frame, height=1, fg_color=get_color("separator"))
         separator.pack(fill="x", padx=10, pady=5)
         
         # Logout
@@ -89,9 +89,9 @@ class UserMenu(ctk.CTkToplevel):
             parent,
             text=display_text,
             command=command,
-            fg_color="transparent",
-            hover_color=("gray70", "gray30"),
-            text_color=("gray14", "gray84"),
+            fg_color=get_bg_color("transparent"),
+            hover_color=get_bg_color("hover_subtle"),
+            text_color=get_text_color("primary"),
             anchor="w",
             height=32
         )

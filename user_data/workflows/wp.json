@@ -1,0 +1,12 @@
+{
+  "name": "wp",
+  "browsers": {
+    "main": {
+      "browser_type": "chrome",
+      "starting_url": "wp.pl"
+    }
+  },
+  "actions": [],
+  "created_at": "2026-01-26T23:29:09.329392",
+  "modified_at": "2026-02-04T15:21:44.560590"
+}

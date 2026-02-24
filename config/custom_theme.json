@@ -156,5 +156,26 @@
     "default_bg": "transparent",
     "hover_bg": ["gray85", "gray20"],
     "selected_bg": ["gray80", "gray25"]
+  },
+  "DataTable": {
+    "background": ["#f8f9fa", "#1a1a1a"],
+    "text": ["#212529", "#e9ecef"], 
+    "selected_bg": ["#0d6efd", "#0d6efd"],
+    "header_bg": ["#ffffff", "#000000"],
+    "header_text": ["#495057", "#f8f9fa"]
+  },
+  "SemanticColors": {
+    "text": {
+      "primary": ["gray14", "gray84"],
+      "secondary": ["gray40", "gray60"],
+      "disabled": ["gray60", "gray45"]
+    },
+    "background": {
+      "transparent": "transparent",
+      "hover_subtle": ["gray70", "gray30"],
+      "hover_strong": ["gray85", "gray20"],
+      "selected": ["gray80", "gray25"]
+    },
+    "separator": ["gray40", "gray40"]
   }
 }

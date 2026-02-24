@@ -9,7 +9,7 @@ from typing import Optional
 from src.types import UserSessionData
 from ui.components.confirm_dialog import ConfirmDialog
 from ui.components.user_menu import UserMenu
-from src.core.theme_manager import switch_theme, get_button_colors
+from src.core.theme_manager import switch_theme, get_button_colors, get_text_color, get_bg_color
 from config import BACKEND_URL
 
 logger = logging.getLogger(__name__)
@@ -47,9 +47,9 @@ class TopBar(ctk.CTkFrame):
             self,
             text=f"{email} ▼",
             command=self.show_user_menu,
-            fg_color="transparent",
-            hover_color=button_colors.get("hover_color", ("gray70", "gray30")),
-            text_color=("gray14", "gray84"),
+            fg_color=get_bg_color("transparent"),
+            hover_color=button_colors.get("hover_color", get_bg_color("hover_subtle")),
+            text_color=get_text_color("primary"),
             font=ctk.CTkFont(size=12)
         )
         self.email_button.grid(row=0, column=1, padx=20, pady=10, sticky="e")
